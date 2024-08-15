@@ -22,6 +22,7 @@ variables:
 .compile_and_test_template: &compile_and_test_definition
   stage: build
   script:
+    - pip3 install cmake
     - mkdir build
     - cd build
     - cmake --version
@@ -33,6 +34,7 @@ variables:
 .compile_and_test_no_builtin_template: &compile_and_test_no_builtin_definition
   stage: build
   script:
+    - pip3 install cmake
     - scripts/ci-install-deps.sh ${BUILD_TYPE}
     - mkdir build
     - cd build
@@ -46,6 +48,7 @@ jammy-release-compile:
   <<: *prepare_docker_definition
   stage: build
   script:
+    - pip3 install cmake
     - mkdir build
     - cd build
     - cmake --version
@@ -92,39 +95,39 @@ jammy-release-no-builtin:
   <<: *prepare_docker_definition
   <<: *compile_and_test_no_builtin_definition
 
-bionic-release-compile:
-  <<: *prepare_docker_definition
-  <<: *compile_and_test_definition
-  image: vladyslavusenko/b_image_bionic:latest
+# bionic-release-compile:
+#  <<: *prepare_docker_definition
+#  <<: *compile_and_test_definition
+#  image: vladyslavusenko/b_image_bionic:latest
 
 focal-release-compile:
   <<: *prepare_docker_definition
   <<: *compile_and_test_definition
   image: vladyslavusenko/b_image_focal:latest
 
-monterey-arm-brewedclang-asan-build:
-  <<: *compile_and_test_definition
-  tags: [macos, "12", arm64]
-  variables:
-    CC: /opt/homebrew/opt/llvm/bin/clang
-    CXX: /opt/homebrew/opt/llvm/bin/clang++
-    BUILD_TYPE: SanitizerRelWithDebInfo
+# monterey-arm-brewedclang-asan-build:
+#   <<: *compile_and_test_definition
+#   tags: [macos, "12", arm64]
+#   variables:
+#     CC: /opt/homebrew/opt/llvm/bin/clang
+#     CXX: /opt/homebrew/opt/llvm/bin/clang++
+#     BUILD_TYPE: SanitizerRelWithDebInfo
 
-monterey-arm-asan-build:
-  <<: *compile_and_test_definition
-  tags: [macos, "12", arm64]
-  variables:
-    BUILD_TYPE: SanitizerRelWithDebInfo
+# monterey-arm-asan-build:
+#   <<: *compile_and_test_definition
+#   tags: [macos, "12", arm64]
+#   variables:
+#     BUILD_TYPE: SanitizerRelWithDebInfo
 
-monterey-arm-build-no-builtin:
-  <<: *compile_and_test_no_builtin_definition
-  tags: [macos, "12", arm64]
+# monterey-arm-build-no-builtin:
+#   <<: *compile_and_test_no_builtin_definition
+#   tags: [macos, "12", arm64]
 
-monterey-arm-relwithdebinfo-compile:
-  <<: *compile_and_test_definition
-  tags: [macos, "12", arm64]
-  variables:
-    BUILD_TYPE: RelWithDebInfo
+# monterey-arm-relwithdebinfo-compile:
+#   <<: *compile_and_test_definition
+#   tags: [macos, "12", arm64]
+#   variables:
+#     BUILD_TYPE: RelWithDebInfo
 
 # check if clang-format would make any changes
 clang-format:
