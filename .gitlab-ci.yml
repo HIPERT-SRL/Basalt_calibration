@@ -3,6 +3,7 @@ image: vladyslavusenko/b_image_jammy:latest
 variables:
   GIT_SUBMODULE_STRATEGY: recursive
   BUILD_TYPE: Release
+  CXX_MARCH: 'haswell'
 
 # template for docker builds with ccache
 .prepare_docker_template: &prepare_docker_definition
@@ -85,8 +86,8 @@ jammy-asan-build:
   <<: *prepare_docker_definition
   <<: *compile_and_test_definition
   variables:
-    CC: clang-15
-    CXX: clang++-15
+    CC: clang-18
+    CXX: clang++-18
     BUILD_TYPE: SanitizerRelWithDebInfo
     # LeakSanitizer doesn't work in (non-priviliged) container
     ASAN_OPTIONS: "detect_leaks=0"

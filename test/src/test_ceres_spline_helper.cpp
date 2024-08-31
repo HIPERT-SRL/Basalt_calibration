@@ -74,9 +74,9 @@ void test_ceres_spline_helper_rd() {
   spline.genRandomTrajectory(3 * N);
 
   for (int64_t t_ns = 0; t_ns < spline.maxTimeNs(); t_ns += 1e8) {
-    Eigen::Vector3d pos1 = spline.evaluate<0>(t_ns);
-    Eigen::Vector3d vel1 = spline.evaluate<1>(t_ns);
-    Eigen::Vector3d accel1 = spline.evaluate<2>(t_ns);
+    Eigen::Vector3d pos1 = spline.template evaluate<0>(t_ns);
+    Eigen::Vector3d vel1 = spline.template evaluate<1>(t_ns);
+    Eigen::Vector3d accel1 = spline.template evaluate<2>(t_ns);
 
     Eigen::Vector3d pos2, vel2, accel2;
 
