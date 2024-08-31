@@ -52,7 +52,7 @@ if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
       set(BASALT_HEADERS_CXX_FLAGS "${BASALT_HEADERS_CXX_FLAGS} -Wno-misleading-indentation")
     endif()
   else()
-    set(BASALT_HEADERS_CXX_FLAGS "${BASALT_HEADERS_CXX_FLAGS} -Wno-error=maybe-uninitialized")
+    set(BASALT_HEADERS_CXX_FLAGS "${BASALT_HEADERS_CXX_FLAGS} -Wno-error=maybe-uninitialized -Wno-error=array-bounds")
   endif()
 
 

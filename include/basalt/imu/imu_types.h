@@ -237,9 +237,9 @@ struct PoseVelBiasState : public PoseVelState<Scalar_> {
   /// @param other state to compute difference.
   VecN diff(const PoseVelBiasState<Scalar>& other) const {
     VecN res;
-    res.segment<9>(0) = PoseVelState<Scalar>::diff(other);
-    res.segment<3>(9) = other.bias_gyro - bias_gyro;
-    res.segment<3>(12) = other.bias_accel - bias_accel;
+    res.template segment<9>(0) = PoseVelState<Scalar>::diff(other);
+    res.template segment<3>(9) = other.bias_gyro - bias_gyro;
+    res.template segment<3>(12) = other.bias_accel - bias_accel;
     return res;
   }
 
