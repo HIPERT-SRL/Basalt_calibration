@@ -140,6 +140,7 @@ class IntegratedImuMeasurement {
     d_state_d_bg_.setZero();
     bias_gyro_lin_.setZero();
     bias_accel_lin_.setZero();
+    sqrt_cov_inv_.setZero();
   }
 
   /// @brief Constructor with start time and bias estimates.
@@ -151,6 +152,7 @@ class IntegratedImuMeasurement {
     cov_.setZero();
     d_state_d_ba_.setZero();
     d_state_d_bg_.setZero();
+    sqrt_cov_inv_.setZero();
   }
 
   /// @brief Integrate IMU data
