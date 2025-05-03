@@ -355,9 +355,6 @@ TEST(ImuPreintegrationTestCase, BiasTest) {
     imu_meas.integrate(data, Eigen::Vector3d::Ones(), Eigen::Vector3d::Ones());
   }
 
-  basalt::IntegratedImuMeasurement<double>::MatN3 d_res_d_ba;
-  basalt::IntegratedImuMeasurement<double>::MatN3 d_res_d_bg;
-
   basalt::PoseVelState<double> delta_state = imu_meas.getDeltaState();
 
   {

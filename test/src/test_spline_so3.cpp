@@ -30,67 +30,12 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#include <basalt/spline/rd_spline.h>
 #include <basalt/spline/so3_spline.h>
 
 #include <iostream>
 
 #include "gtest/gtest.h"
 #include "test_utils.h"
-
-template <int DIM, int N, int DERIV>
-void testEvaluate(const basalt::RdSpline<DIM, N> &spline, int64_t t_ns) {
-  using VectorD = typename basalt::RdSpline<DIM, N>::VecD;
-  using MatrixD = typename basalt::RdSpline<DIM, N>::MatD;
-
-  typename basalt::RdSpline<DIM, N>::JacobianStruct J_spline;
-
-  spline.template evaluate<DERIV>(t_ns, &J_spline);
-
-  VectorD x0;
-  x0.setZero();
-
-  for (size_t i = 0; i < 3 * N; i++) {
-    std::stringstream ss;
-
-    ss << "d_val_d_knot" << i << " time " << t_ns;
-
-    MatrixD J_a;
-    J_a.setZero();
-
-    if (i >= J_spline.start_idx && i < J_spline.start_idx + N) {
-      J_a.diagonal().setConstant(J_spline.d_val_d_knot[i - J_spline.start_idx]);
-    }
-
-    test_jacobian(
-        ss.str(), J_a,
-        [&](const VectorD &x) {
-          basalt::RdSpline<DIM, N> spline1 = spline;
-          spline1.getKnot(i) += x;
-
-          return spline1.template evaluate<DERIV>(t_ns);
-        },
-        x0);
-  }
-}
-
-template <int DIM, int N, int DERIV>
-void testTimeDeriv(const basalt::RdSpline<DIM, N> &spline, int64_t t_ns) {
-  using VectorD = typename basalt::RdSpline<DIM, N>::VecD;
-
-  VectorD d_val_d_t = spline.template evaluate<DERIV + 1>(t_ns);
-
-  Eigen::Matrix<double, 1, 1> x0;
-  x0.setZero();
-
-  test_jacobian(
-      "d_val_d_t", d_val_d_t,
-      [&](const Eigen::Matrix<double, 1, 1> &x) {
-        int64_t inc = x[0] * 1e9;
-        return spline.template evaluate<DERIV>(t_ns + inc);
-      },
-      x0);
-}
 
 template <int N>
 void testEvaluateSo3(const basalt::So3Spline<N> &spline, int64_t t_ns) {
@@ -310,187 +255,7 @@ void testEvaluateSo3Accel(const basalt::So3Spline<N> &spline, int64_t t_ns) {
   }
 }
 
-TEST(SplineTest, UBSplineEvaluateKnots4) {
-  static constexpr int DIM = 3;
-  static constexpr int N = 4;
-
-  basalt::RdSpline<DIM, N> spline(int64_t(2e9));
-  spline.genRandomTrajectory(3 * N);
-
-  for (int64_t t_ns = 0; t_ns < spline.maxTimeNs(); t_ns += 1e8) {
-    testEvaluate<DIM, N, 0>(spline, t_ns);
-  }
-}
-
-TEST(SplineTest, UBSplineEvaluateKnots5) {
-  static constexpr int DIM = 3;
-  static constexpr int N = 5;
-
-  basalt::RdSpline<DIM, N> spline(int64_t(2e9));
-  spline.genRandomTrajectory(3 * N);
-
-  for (int64_t t_ns = 0; t_ns < spline.maxTimeNs(); t_ns += 1e8) {
-    testEvaluate<DIM, N, 0>(spline, t_ns);
-  }
-}
-
-TEST(SplineTest, UBSplineEvaluateKnots6) {
-  static constexpr int DIM = 3;
-  static constexpr int N = 6;
-
-  basalt::RdSpline<DIM, N> spline(int64_t(2e9));
-  spline.genRandomTrajectory(3 * N);
-
-  for (int64_t t_ns = 0; t_ns < spline.maxTimeNs(); t_ns += 1e8) {
-    testEvaluate<DIM, N, 0>(spline, t_ns);
-  }
-}
-
-TEST(SplineTest, UBSplineVelocityKnots4) {
-  static constexpr int DIM = 3;
-  static constexpr int N = 4;
-
-  basalt::RdSpline<DIM, N> spline(int64_t(2e9));
-  spline.genRandomTrajectory(3 * N);
-
-  for (int64_t t_ns = 0; t_ns < spline.maxTimeNs(); t_ns += 1e8) {
-    testEvaluate<DIM, N, 1>(spline, t_ns);
-  }
-}
-
-TEST(SplineTest, UBSplineVelocityKnots5) {
-  static constexpr int DIM = 3;
-  static constexpr int N = 5;
-
-  basalt::RdSpline<DIM, N> spline(int64_t(2e9));
-  spline.genRandomTrajectory(3 * N);
-
-  for (int64_t t_ns = 0; t_ns < spline.maxTimeNs(); t_ns += 1e8) {
-    testEvaluate<DIM, N, 1>(spline, t_ns);
-  }
-}
-
-TEST(SplineTest, UBSplineVelocityKnots6) {
-  static constexpr int DIM = 3;
-  static constexpr int N = 6;
-
-  basalt::RdSpline<DIM, N> spline(int64_t(2e9));
-  spline.genRandomTrajectory(3 * N);
-
-  for (int64_t t_ns = 0; t_ns < spline.maxTimeNs(); t_ns += 1e8) {
-    testEvaluate<DIM, N, 1>(spline, t_ns);
-  }
-}
-
-TEST(SplineTest, UBSplineAccelKnots4) {
-  static constexpr int DIM = 3;
-  static constexpr int N = 4;
-
-  basalt::RdSpline<DIM, N> spline(int64_t(2e9));
-  spline.genRandomTrajectory(3 * N);
-
-  for (int64_t t_ns = 0; t_ns < spline.maxTimeNs(); t_ns += 1e8) {
-    testEvaluate<DIM, N, 2>(spline, t_ns);
-  }
-}
-
-TEST(SplineTest, UBSplineAccelKnots5) {
-  static constexpr int DIM = 3;
-  static constexpr int N = 5;
-
-  basalt::RdSpline<DIM, N> spline(int64_t(2e9));
-  spline.genRandomTrajectory(3 * N);
-
-  for (int64_t t_ns = 0; t_ns < spline.maxTimeNs(); t_ns += 1e8) {
-    testEvaluate<DIM, N, 2>(spline, t_ns);
-  }
-}
-
-TEST(SplineTest, UBSplineAccelKnots6) {
-  static constexpr int DIM = 3;
-  static constexpr int N = 6;
-
-  basalt::RdSpline<DIM, N> spline(int64_t(2e9));
-  spline.genRandomTrajectory(3 * N);
-
-  for (int64_t t_ns = 0; t_ns < spline.maxTimeNs(); t_ns += 1e8) {
-    testEvaluate<DIM, N, 2>(spline, t_ns);
-  }
-}
-
-TEST(SplineTest, UBSplineEvaluateTimeDeriv4) {
-  static constexpr int DIM = 3;
-  static constexpr int N = 4;
-
-  basalt::RdSpline<DIM, N> spline(int64_t(2e9));
-  spline.genRandomTrajectory(3 * N);
-
-  for (int64_t t_ns = 1e8; t_ns < spline.maxTimeNs() - 1e8; t_ns += 1e8) {
-    testTimeDeriv<DIM, N, 0>(spline, t_ns);
-  }
-}
-
-TEST(SplineTest, UBSplineEvaluateTimeDeriv5) {
-  static constexpr int DIM = 3;
-  static constexpr int N = 5;
-
-  basalt::RdSpline<DIM, N> spline(int64_t(2e9));
-  spline.genRandomTrajectory(3 * N);
-
-  for (int64_t t_ns = 1e8; t_ns < spline.maxTimeNs() - 1e8; t_ns += 1e8) {
-    testTimeDeriv<DIM, N, 0>(spline, t_ns);
-  }
-}
-
-TEST(SplineTest, UBSplineEvaluateTimeDeriv6) {
-  static constexpr int DIM = 3;
-  static constexpr int N = 6;
-
-  basalt::RdSpline<DIM, N> spline(int64_t(2e9));
-  spline.genRandomTrajectory(3 * N);
-
-  for (int64_t t_ns = 1e8; t_ns < spline.maxTimeNs() - 1e8; t_ns += 1e8) {
-    testTimeDeriv<DIM, N, 0>(spline, t_ns);
-  }
-}
-
-TEST(SplineTest, UBSplineVelocityTimeDeriv4) {
-  static constexpr int DIM = 3;
-  static constexpr int N = 4;
-
-  basalt::RdSpline<DIM, N> spline(int64_t(2e9));
-  spline.genRandomTrajectory(3 * N);
-
-  for (int64_t t_ns = 1e8; t_ns < spline.maxTimeNs() - 1e8; t_ns += 1e8) {
-    testTimeDeriv<DIM, N, 1>(spline, t_ns);
-  }
-}
-
-TEST(SplineTest, UBSplineVelocityTimeDeriv5) {
-  static constexpr int DIM = 3;
-  static constexpr int N = 5;
-
-  basalt::RdSpline<DIM, N> spline(int64_t(2e9));
-  spline.genRandomTrajectory(3 * N);
-
-  for (int64_t t_ns = 1e8; t_ns < spline.maxTimeNs() - 1e8; t_ns += 1e8) {
-    testTimeDeriv<DIM, N, 1>(spline, t_ns);
-  }
-}
-
-TEST(SplineTest, UBSplineVelocityTimeDeriv6) {
-  static constexpr int DIM = 3;
-  static constexpr int N = 6;
-
-  basalt::RdSpline<DIM, N> spline(int64_t(2e9));
-  spline.genRandomTrajectory(3 * N);
-
-  for (int64_t t_ns = 1e8; t_ns < spline.maxTimeNs() - 1e8; t_ns += 1e8) {
-    testTimeDeriv<DIM, N, 1>(spline, t_ns);
-  }
-}
-
-TEST(SplineTest, SO3CUBSplineEvaluateKnots4) {
+TEST(SplineSO3Test, SO3CUBSplineEvaluateKnots4) {
   static constexpr int N = 4;
 
   basalt::So3Spline<N> spline(int64_t(2e9));
@@ -501,7 +266,7 @@ TEST(SplineTest, SO3CUBSplineEvaluateKnots4) {
   }
 }
 
-TEST(SplineTest, SO3CUBSplineEvaluateKnots5) {
+TEST(SplineSO3Test, SO3CUBSplineEvaluateKnots5) {
   static constexpr int N = 5;
 
   basalt::So3Spline<N> spline(int64_t(2e9));
@@ -512,7 +277,7 @@ TEST(SplineTest, SO3CUBSplineEvaluateKnots5) {
   }
 }
 
-TEST(SplineTest, SO3CUBSplineEvaluateKnots6) {
+TEST(SplineSO3Test, SO3CUBSplineEvaluateKnots6) {
   static constexpr int N = 6;
 
   basalt::So3Spline<N> spline(int64_t(2e9));
@@ -523,7 +288,7 @@ TEST(SplineTest, SO3CUBSplineEvaluateKnots6) {
   }
 }
 
-TEST(SplineTest, SO3CUBSplineVelocity4) {
+TEST(SplineSO3Test, SO3CUBSplineVelocity4) {
   static constexpr int N = 4;
 
   basalt::So3Spline<N> spline(int64_t(2e9));
@@ -534,7 +299,7 @@ TEST(SplineTest, SO3CUBSplineVelocity4) {
   }
 }
 
-TEST(SplineTest, SO3CUBSplineVelocity5) {
+TEST(SplineSO3Test, SO3CUBSplineVelocity5) {
   static constexpr int N = 5;
 
   basalt::So3Spline<N> spline(int64_t(2e9));
@@ -545,7 +310,7 @@ TEST(SplineTest, SO3CUBSplineVelocity5) {
   }
 }
 
-TEST(SplineTest, SO3CUBSplineVelocity6) {
+TEST(SplineSO3Test, SO3CUBSplineVelocity6) {
   static constexpr int N = 6;
 
   basalt::So3Spline<N> spline(int64_t(2e9));
@@ -556,7 +321,7 @@ TEST(SplineTest, SO3CUBSplineVelocity6) {
   }
 }
 
-TEST(SplineTest, SO3CUBSplineAcceleration4) {
+TEST(SplineSO3Test, SO3CUBSplineAcceleration4) {
   static constexpr int N = 4;
 
   basalt::So3Spline<N> spline(int64_t(2e9));
@@ -567,7 +332,7 @@ TEST(SplineTest, SO3CUBSplineAcceleration4) {
   }
 }
 
-TEST(SplineTest, SO3CUBSplineAcceleration5) {
+TEST(SplineSO3Test, SO3CUBSplineAcceleration5) {
   static constexpr int N = 5;
 
   basalt::So3Spline<N> spline(int64_t(2e9));
@@ -578,7 +343,7 @@ TEST(SplineTest, SO3CUBSplineAcceleration5) {
   }
 }
 
-TEST(SplineTest, SO3CUBSplineAcceleration6) {
+TEST(SplineSO3Test, SO3CUBSplineAcceleration6) {
   static constexpr int N = 6;
 
   basalt::So3Spline<N> spline(int64_t(2e9));
@@ -589,7 +354,7 @@ TEST(SplineTest, SO3CUBSplineAcceleration6) {
   }
 }
 
-TEST(SplineTest, SO3CUBSplineJerk5) {
+TEST(SplineSO3Test, SO3CUBSplineJerk5) {
   static constexpr int N = 5;
 
   basalt::So3Spline<N> spline(int64_t(2e9));
@@ -600,7 +365,7 @@ TEST(SplineTest, SO3CUBSplineJerk5) {
   }
 }
 
-TEST(SplineTest, SO3CUBSplineJerk6) {
+TEST(SplineSO3Test, SO3CUBSplineJerk6) {
   static constexpr int N = 6;
 
   basalt::So3Spline<N> spline(int64_t(2e9));
@@ -611,7 +376,7 @@ TEST(SplineTest, SO3CUBSplineJerk6) {
   }
 }
 
-TEST(SplineTest, SO3CUBSplineVelocityKnots4) {
+TEST(SplineSO3Test, SO3CUBSplineVelocityKnots4) {
   static constexpr int N = 4;
 
   basalt::So3Spline<N> spline(int64_t(2e9));
@@ -622,7 +387,7 @@ TEST(SplineTest, SO3CUBSplineVelocityKnots4) {
   }
 }
 
-TEST(SplineTest, SO3CUBSplineVelocityKnots5) {
+TEST(SplineSO3Test, SO3CUBSplineVelocityKnots5) {
   static constexpr int N = 5;
 
   basalt::So3Spline<N> spline(int64_t(2e9));
@@ -633,7 +398,7 @@ TEST(SplineTest, SO3CUBSplineVelocityKnots5) {
   }
 }
 
-TEST(SplineTest, SO3CUBSplineVelocityKnots6) {
+TEST(SplineSO3Test, SO3CUBSplineVelocityKnots6) {
   static constexpr int N = 6;
 
   basalt::So3Spline<N> spline(int64_t(2e9));
@@ -644,7 +409,7 @@ TEST(SplineTest, SO3CUBSplineVelocityKnots6) {
   }
 }
 
-TEST(SplineTest, SO3CUBSplineAccelerationKnots4) {
+TEST(SplineSO3Test, SO3CUBSplineAccelerationKnots4) {
   static constexpr int N = 4;
 
   basalt::So3Spline<N> spline(int64_t(2e9));
@@ -655,7 +420,7 @@ TEST(SplineTest, SO3CUBSplineAccelerationKnots4) {
   }
 }
 
-TEST(SplineTest, SO3CUBSplineAccelerationKnots5) {
+TEST(SplineSO3Test, SO3CUBSplineAccelerationKnots5) {
   static constexpr int N = 5;
 
   basalt::So3Spline<N> spline(int64_t(2e9));
@@ -666,7 +431,7 @@ TEST(SplineTest, SO3CUBSplineAccelerationKnots5) {
   }
 }
 
-TEST(SplineTest, SO3CUBSplineAccelerationKnots6) {
+TEST(SplineSO3Test, SO3CUBSplineAccelerationKnots6) {
   static constexpr int N = 6;
 
   basalt::So3Spline<N> spline(int64_t(2e9));
@@ -677,7 +442,7 @@ TEST(SplineTest, SO3CUBSplineAccelerationKnots6) {
   }
 }
 
-TEST(SplineTest, SO3CUBSplineBounds) {
+TEST(SplineSO3Test, SO3CUBSplineBounds) {
   static constexpr int N = 5;
 
   basalt::So3Spline<N> spline(int64_t(2e9));
@@ -694,64 +459,4 @@ TEST(SplineTest, SO3CUBSplineBounds) {
   // std::cerr << "res3\n" << res1.matrix() << std::endl;
   // Sophus::SO3d res4 = spline.evaluate(spline.minTimeNs() - 1);
   // std::cerr << "res4\n" << res2.matrix() << std::endl;
-}
-
-TEST(SplineTest, UBSplineBounds) {
-  static constexpr int N = 5;
-  static constexpr int DIM = 3;
-
-  basalt::RdSpline<DIM, N> spline(int64_t(2e9));
-  spline.genRandomTrajectory(3 * N);
-
-  // std::cerr << "spline.maxTimeNs() " << spline.maxTimeNs() << std::endl;
-
-  spline.evaluate(spline.maxTimeNs());
-  // std::cerr << "res1\n" << res1.matrix() << std::endl;
-  spline.evaluate(spline.minTimeNs());
-  // std::cerr << "res2\n" << res2.matrix() << std::endl;
-
-  // Eigen::Vector3d res3 = spline.evaluate(spline.maxTimeNs() + 1);
-  // std::cerr << "res3\n" << res1.matrix() << std::endl;
-  // Eigen::Vector3d res4 = spline.evaluate(spline.minTimeNs() - 1);
-  // std::cerr << "res4\n" << res2.matrix() << std::endl;
-}
-
-TEST(SplineTest, CrossProductTest) {
-  Eigen::Matrix3d J_1;
-  Eigen::Matrix3d J_2;
-  Eigen::Matrix3d J_cross;
-  Eigen::Vector3d v1;
-  Eigen::Vector3d v2;
-  J_1.setRandom();
-  J_2.setRandom();
-  v1.setRandom();
-  v2.setRandom();
-
-  J_cross =
-      Sophus::SO3d::hat(J_1 * v1) * J_2 - Sophus::SO3d::hat(J_2 * v2) * J_1;
-
-  test_jacobian(
-      "cross_prod_test1", J_cross,
-      [&](const Eigen::Vector3d &x) {
-        return (J_1 * (v1 + x)).cross(J_2 * (v2 + x));
-      },
-      Eigen::Vector3d::Zero());
-
-  J_cross = -Sophus::SO3d::hat(J_2 * v2) * J_1;
-
-  test_jacobian(
-      "cross_prod_test2", J_cross,
-      [&](const Eigen::Vector3d &x) {
-        return (J_1 * (v1 + x)).cross(J_2 * v2);
-      },
-      Eigen::Vector3d::Zero());
-
-  J_cross = Sophus::SO3d::hat(J_1 * v1) * J_2;
-
-  test_jacobian(
-      "cross_prod_test2", J_cross,
-      [&](const Eigen::Vector3d &x) {
-        return (J_1 * v1).cross(J_2 * (v2 + x));
-      },
-      Eigen::Vector3d::Zero());
 }

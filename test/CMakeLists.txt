@@ -23,8 +23,14 @@ target_sources(basalt-headers-test-utils
 add_executable(test_image src/test_image.cpp)
 target_link_libraries(test_image gtest_main basalt::basalt-headers-test-utils basalt::basalt-headers)
 
-add_executable(test_spline src/test_spline.cpp)
-target_link_libraries(test_spline gtest_main basalt::basalt-headers-test-utils basalt::basalt-headers)
+add_executable(test_spline_rd src/test_spline_rd.cpp)
+target_link_libraries(test_spline_rd gtest_main basalt::basalt-headers-test-utils basalt::basalt-headers)
+
+add_executable(test_spline_so3 src/test_spline_so3.cpp)
+target_link_libraries(test_spline_so3 gtest_main basalt::basalt-headers-test-utils basalt::basalt-headers)
+
+add_executable(test_bezier_rd src/test_bezier_rd.cpp)
+target_link_libraries(test_bezier_rd gtest_main basalt::basalt-headers-test-utils basalt::basalt-headers)
 
 add_executable(test_spline_se3 src/test_spline_se3.cpp)
 target_link_libraries(test_spline_se3 gtest_main basalt::basalt-headers-test-utils basalt::basalt-headers)
@@ -58,7 +64,9 @@ include(GoogleTest)  # for gtest_discover_test
 enable_testing()
 
 gtest_discover_tests(test_image)
-gtest_discover_tests(test_spline)
+gtest_discover_tests(test_spline_so3)
+gtest_discover_tests(test_spline_rd)
+gtest_discover_tests(test_bezier_rd)
 gtest_discover_tests(test_spline_se3)
 gtest_discover_tests(test_camera)
 gtest_discover_tests(test_sophus)

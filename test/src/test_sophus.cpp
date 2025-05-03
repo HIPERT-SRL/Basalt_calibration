@@ -334,7 +334,6 @@ TEST(SophusUtilsCase, RightJacobianSim3Decoupled) {
   phi.setRandom();
 
   Sophus::Matrix7d J_a;
-  Sophus::Matrix7d J_n;
   Sophus::rightJacobianSim3Decoupled(phi, J_a);
 
   Sophus::Vector7d x0;
@@ -354,7 +353,6 @@ TEST(SophusUtilsCase, RightJacobianInvSim3Decoupled) {
   phi.setRandom();
 
   Sophus::Matrix7d J_a;
-  Sophus::Matrix7d J_n;
   Sophus::rightJacobianInvSim3Decoupled(phi, J_a);
 
   Sophus::Vector7d x0;
