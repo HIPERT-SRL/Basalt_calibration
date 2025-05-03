@@ -775,7 +775,7 @@ class So3Spline {
   int64_t dt_ns_;                      ///< Knot interval in nanoseconds
   int64_t start_t_ns_;                 ///< Start time in nanoseconds
   std::array<_Scalar, 4> pow_inv_dt_;  ///< Array with inverse powers of dt
-};                                     // namespace basalt
+};  // namespace basalt
 
 template <int _N, typename _Scalar>
 const typename So3Spline<_N, _Scalar>::MatN

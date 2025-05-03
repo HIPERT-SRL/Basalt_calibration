@@ -3,3 +3,5 @@ cmake-build*
 CMakeLists.txt.user
 build*
 public
+.cache
+compile_commands.json

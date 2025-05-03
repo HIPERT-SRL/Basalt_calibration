@@ -33,12 +33,11 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 @file
-@brief Uniform B-spline for euclidean vectors
+@brief Uniform Bezier curve for euclidean vectors
 */
 
 #pragma once
 
-#include <basalt/spline/rd_bezier.h>
 #include <basalt/spline/spline_common.h>
 #include <basalt/utils/assert.h>
 #include <basalt/utils/sophus_utils.hpp>
@@ -46,56 +45,15 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <Eigen/Dense>
 
 #include <array>
+#include "spline_common.h"
 
 namespace basalt {
 
-/// @brief Uniform B-spline for euclidean vectors with dimention DIM of order
+/// @brief Uniform Bezier curve for euclidean vectors with dimention DIM of
+/// order
 /// N
-///
-/// For example, in the particular case scalar values and order N=5, for a time
-/// \f$t \in [t_i, t_{i+1})\f$ the value of \f$p(t)\f$ depends only on 5 control
-/// points at \f$[t_i, t_{i+1}, t_{i+2}, t_{i+3}, t_{i+4}]\f$. To
-/// simplify calculations we transform time to uniform representation \f$s(t) =
-/// (t - t_0)/\Delta t \f$, such that control points transform into \f$ s_i \in
-/// [0,..,N] \f$. We define function \f$ u(t) = s(t)-s_i \f$ to be a time since
-/// the start of the segment. Following the matrix representation of De Boor -
-/// Cox formula, the value of the function can be
-/// evaluated as follows: \f{align}{
-///    p(u(t)) &=
-///    \begin{pmatrix} p_{i}\\ p_{i+1}\\ p_{i+2}\\ p_{i+3}\\ p_{i+4}
-///    \end{pmatrix}^T M_5 \begin{pmatrix} 1 \\ u \\ u^2 \\ u^3 \\ u^4
-///    \end{pmatrix},
-/// \f}
-/// where \f$ p_{i} \f$ are knots and  \f$ M_5 \f$ is a blending matrix computed
-/// using \ref computeBlendingMatrix \f{align}{
-///    M_5 = \frac{1}{4!}
-///    \begin{pmatrix} 1 & -4 & 6 & -4 & 1 \\ 11 & -12  & -6 & 12  & -4 \\11 &
-///    12 &  -6 &  -12  &  6 \\ 1  &  4  &  6  &  4  & -4 \\ 0  &  0  &  0  &  0
-///    &  1 \end{pmatrix}.
-/// \f}
-/// Given this formula, we can evaluate derivatives with respect to time
-/// (velocity, acceleration) in the following way:
-/// \f{align}{
-///    p'(u(t)) &= \frac{1}{\Delta t}
-///    \begin{pmatrix} p_{i}\\ p_{i+1}\\ p_{i+2}\\ p_{i+3}\\ p_{i+4}
-///    \end{pmatrix}^T
-///    M_5
-///    \begin{pmatrix} 0 \\ 1 \\ 2u \\ 3u^2 \\ 4u^3 \end{pmatrix},
-/// \f}
-/// \f{align}{
-///    p''(u(t)) &= \frac{1}{\Delta t^2}
-///    \begin{pmatrix} p_{i}\\ p_{i+1}\\ p_{i+2}\\ p_{i+3}\\ p_{i+4}
-///    \end{pmatrix}^T
-///    M_5
-///    \begin{pmatrix} 0 \\ 0 \\ 2 \\ 6u \\ 12u^2 \end{pmatrix}.
-/// \f}
-/// Higher time derivatives are evaluated similarly. This class supports
-/// vector values for knots \f$ p_{i} \f$. The corresponding derivative vector
-/// on the right is computed using \ref baseCoeffsWithTime.
-///
-/// See [[arXiv:1911.08860]](https://arxiv.org/abs/1911.08860) for more details.
 template <int _DIM, int _N, typename _Scalar = double>
-class RdSpline {
+class RdBezier {
  public:
   static constexpr int N = _N;        ///< Order of the spline.
   static constexpr int DEG = _N - 1;  ///< Degree of the spline.
@@ -111,31 +69,25 @@ class RdSpline {
   using VecD = Eigen::Matrix<_Scalar, _DIM, 1>;
   using MatD = Eigen::Matrix<_Scalar, _DIM, _DIM>;
 
-  /// @brief Struct to store the Jacobian of the spline
-  ///
-  /// Since B-spline of order N has local support (only N knots infuence the
-  /// value) the Jacobian is zero for all knots except maximum N for value and
-  /// all derivatives.
+  /// @brief Struct to store the Jacobian of the Bezier curve
   struct JacobianStruct {
     size_t
         start_idx;  ///< Start index of the non-zero elements of the Jacobian.
     std::array<_Scalar, N> d_val_d_knot;  ///< Value of nonzero Jacobians.
   };
 
-  /// @brief Struct to store the Jacobian of the squared integral of spline
-  ///
   struct IntegralJacobianStruct {
-    Eigen::aligned_deque<VecD> d_int_d_knot;
+    std::array<VecD, _N> d_int_d_knot;
   };
 
   /// @brief Default constructor
-  RdSpline() = default;
+  RdBezier() = default;
 
   /// @brief Constructor with knot interval and start time
   ///
   /// @param[in] time_interval_ns knot time interval in nanoseconds
   /// @param[in] start_time_ns start time of the spline in nanoseconds
-  RdSpline(int64_t time_interval_ns, int64_t start_time_ns = 0)
+  RdBezier(int64_t time_interval_ns, int64_t start_time_ns = 0)
       : dt_ns_(time_interval_ns), start_t_ns_(start_time_ns) {
     pow_inv_dt_[0] = 1.0;
     pow_inv_dt_[1] = S_TO_NS / dt_ns_;
@@ -147,8 +99,8 @@ class RdSpline {
 
   /// @brief Cast to different scalar type
   template <typename Scalar2>
-  inline RdSpline<_DIM, _N, Scalar2> cast() const {
-    RdSpline<_DIM, _N, Scalar2> res;
+  inline RdBezier<_DIM, _N, Scalar2> cast() const {
+    RdBezier<_DIM, _N, Scalar2> res;
 
     res.dt_ns_ = dt_ns_;
     res.start_t_ns_ = start_t_ns_;
@@ -157,8 +109,8 @@ class RdSpline {
       res.pow_inv_dt_[i] = pow_inv_dt_[i];
     }
 
-    for (const auto& k : knots_) {
-      res.knots_.emplace_back(k.template cast<Scalar2>());
+    for (int i = 0; i < N; i++) {
+      res.knots_[i] = knots_[i].template cast<Scalar2>();
     }
 
     return res;
@@ -185,49 +137,26 @@ class RdSpline {
 
   /// @brief Gererate random trajectory
   ///
-  /// @param[in] n number of knots to generate
   /// @param[in] static_init if true the first N knots will be the same
   /// resulting in static initial condition
-  void genRandomTrajectory(int n, bool static_init = false) {
+  void genRandomTrajectory(bool static_init = false) {
     if (static_init) {
       VecD rnd = VecD::Random() * 5;
 
       for (int i = 0; i < N; i++) {
-        knots_.push_back(rnd);
-      }
-      for (int i = 0; i < n - N; i++) {
-        knots_.push_back(VecD::Random() * 5);
+        knots_[i] = rnd;
       }
     } else {
-      for (int i = 0; i < n; i++) {
-        knots_.push_back(VecD::Random() * 5);
+      for (int i = 0; i < N; i++) {
+        knots_[i] = VecD::Random();
       }
     }
   }
-
-  /// @brief Add knot to the end of the spline
-  ///
-  /// @param[in] knot knot to add
-  inline void knotsPushBack(const VecD& knot) { knots_.push_back(knot); }
-
-  /// @brief Remove knot from the back of the spline
-  inline void knotsPopBack() { knots_.pop_back(); }
 
   /// @brief Return the first knot of the spline
   ///
   /// @return first knot of the spline
   inline const VecD& knotsFront() const { return knots_.front(); }
-
-  /// @brief Remove first knot of the spline and increase the start time
-  inline void knotsPopFront() {
-    start_t_ns_ += dt_ns_;
-    knots_.pop_front();
-  }
-
-  /// @brief Resize containter with knots
-  ///
-  /// @param[in] n number of knots
-  inline void resize(size_t n) { knots_.resize(n); }
 
   /// @brief Return reference to the knot with index i
   ///
@@ -240,16 +169,6 @@ class RdSpline {
   /// @param i index of the knot
   /// @return const reference to the knot
   inline const VecD& getKnot(int i) const { return knots_[i]; }
-
-  /// @brief Return number of knots
-  ///
-  /// @return number ofknots
-  size_t numKnots() const { return knots_.size(); }
-
-  /// @brief Return const reference to deque with knots
-  ///
-  /// @return const reference to deque with knots
-  const Eigen::aligned_deque<VecD>& getKnots() const { return knots_; }
 
   /// @brief Return time interval in nanoseconds
   ///
@@ -322,71 +241,34 @@ class RdSpline {
       IntegralJacobianStruct* J = nullptr) const {
     _Scalar res = _Scalar(0);
 
-    if (J) {
-      J->d_int_d_knot.resize(knots_.size());
-      for (auto& k : J->d_int_d_knot) {
-        k.setZero();
-      }
-    }
-
     if (Derivative >= 0 && Derivative < N) {
       Eigen::Matrix<double, DIM, N> knots_matrix;
       Eigen::Matrix<double, DIM, N> tmp;
-      MatN integral_quad_coeff = BLENDING_MATRIX *
-                                 QUADRATIC_COEFFICIENTS[Derivative] *
-                                 BLENDING_MATRIX.transpose();
+
+      for (int i = 0; i < N; i++) {
+        knots_matrix.col(i) = getKnot(i);
+      }
 
       _Scalar scaling;
       if (Derivative == 0) {
-        scaling = _Scalar(1) / pow_inv_dt_[1];
+        scaling = _Scalar(1.0) / pow_inv_dt_[1];
       } else {
         scaling = pow_inv_dt_[Derivative] * pow_inv_dt_[Derivative - 1];
       }
 
-      for (int start_knot_idx = 0; start_knot_idx <= int(knots_.size()) - N;
-           start_knot_idx++) {
+      tmp = knots_matrix * BLENDING_MATRIX *
+            QUADRATIC_COEFFICIENTS[Derivative] * BLENDING_MATRIX.transpose();
+
+      if (J) {
         for (int i = 0; i < N; i++) {
-          knots_matrix.col(i) = getKnot(start_knot_idx + i);
+          J->d_int_d_knot[i] = scaling * tmp.col(i);
         }
-
-        tmp = knots_matrix * integral_quad_coeff;
-
-        if (J) {
-          for (int i = 0; i < N; i++) {
-            J->d_int_d_knot[start_knot_idx + i] += scaling * tmp.col(i);
-          }
-        }
-
-        res +=
-            _Scalar(0.5) * scaling * (tmp.array() * knots_matrix.array()).sum();
       }
+
+      res = _Scalar(0.5) * scaling * (tmp.array() * knots_matrix.array()).sum();
     }
 
     return res;
-  }
-
-  RdBezier<_DIM, _N, _Scalar> getSegmentBezierCurve(int start_knot) const {
-    BASALT_ASSERT_STREAM(start_knot >= 0, "start_knot " << start_knot);
-    BASALT_ASSERT_STREAM(
-        start_knot <= int(knots_.size() - N),
-        "start_knot " << start_knot << " knots_.size() " << knots_.size());
-
-    RdBezier<_DIM, _N, _Scalar> bezier(dt_ns_,
-                                       start_t_ns_ + start_knot * dt_ns_);
-
-    MatN transform = BLENDING_MATRIX *
-                     basalt::RdBezier<_DIM, _N, _Scalar>::INV_BLENDING_MATRIX;
-    Eigen::Matrix<double, DIM, N> knots_matrix;
-
-    for (int i = 0; i < N; i++) {
-      knots_matrix.col(i) = getKnot(start_knot + i);
-    }
-    knots_matrix *= transform;
-    for (int i = 0; i < N; i++) {
-      bezier.getKnot(i) = knots_matrix.col(i);
-    }
-
-    return bezier;
   }
 
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -427,32 +309,39 @@ class RdSpline {
   static const MatN
       BLENDING_MATRIX;  ///< Blending matrix. See \ref computeBlendingMatrix.
 
-  static const MatN BASE_COEFFICIENTS;  ///< Base coefficients matrix.
-                                        ///< See \ref computeBaseCoefficients.
+  static const MatN INV_BLENDING_MATRIX;  ///< Inverse blending matrix.
 
   static const std::array<MatN, _N>
       QUADRATIC_COEFFICIENTS;  ///< Matrices used to compute integral of the
                                ///< squared time derivatives
 
-  Eigen::aligned_deque<VecD> knots_;    ///< Knots
+  static const MatN BASE_COEFFICIENTS;  ///< Base coefficients matrix.
+                                        ///< See \ref computeBaseCoefficients.
+
+  std::array<VecD, _N> knots_;          ///< Knots
   int64_t dt_ns_{0};                    ///< Knot interval in nanoseconds
   int64_t start_t_ns_{0};               ///< Start time in nanoseconds
   std::array<_Scalar, _N> pow_inv_dt_;  ///< Array with inverse powers of dt
 };
 
 template <int _DIM, int _N, typename _Scalar>
-const typename RdSpline<_DIM, _N, _Scalar>::MatN
-    RdSpline<_DIM, _N, _Scalar>::BASE_COEFFICIENTS =
+const typename RdBezier<_DIM, _N, _Scalar>::MatN
+    RdBezier<_DIM, _N, _Scalar>::BASE_COEFFICIENTS =
         computeBaseCoefficients<_N, _Scalar>();
 
 template <int _DIM, int _N, typename _Scalar>
-const std::array<typename RdSpline<_DIM, _N, _Scalar>::MatN, _N>
-    RdSpline<_DIM, _N, _Scalar>::QUADRATIC_COEFFICIENTS =
+const typename RdBezier<_DIM, _N, _Scalar>::MatN
+    RdBezier<_DIM, _N, _Scalar>::BLENDING_MATRIX =
+        computeBlendingMatrixBezier<_N, _Scalar>();
+
+template <int _DIM, int _N, typename _Scalar>
+const std::array<typename RdBezier<_DIM, _N, _Scalar>::MatN, _N>
+    RdBezier<_DIM, _N, _Scalar>::QUADRATIC_COEFFICIENTS =
         computeQuadraticCoefficients<_N, _Scalar>();
 
 template <int _DIM, int _N, typename _Scalar>
-const typename RdSpline<_DIM, _N, _Scalar>::MatN
-    RdSpline<_DIM, _N, _Scalar>::BLENDING_MATRIX =
-        computeBlendingMatrix<_N, _Scalar, false>();
+const typename RdBezier<_DIM, _N, _Scalar>::MatN
+    RdBezier<_DIM, _N, _Scalar>::INV_BLENDING_MATRIX =
+        computeBlendingMatrixBezier<_N, _Scalar>().inverse();
 
 }  // namespace basalt
