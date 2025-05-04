@@ -5,3 +5,4 @@ build*
 public
 .cache
 compile_commands.json
+.cmake_build
