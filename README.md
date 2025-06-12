@@ -11,6 +11,8 @@ This library includes:
 * Preintegration of inertial measurement unit (IMU) data.
 * Data types to store IMU-camera calibration.
 * Cereal serialization for basalt types as well as some Eigen and Sophus types.
+* AprilGrid detection support
+* Utilities for camera calibration
 
 
 
