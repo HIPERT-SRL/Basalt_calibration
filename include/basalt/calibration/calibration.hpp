@@ -66,6 +66,58 @@ struct Calibration {
     gyro_bias_std.setConstant(0.0001);
   }
 
+void printInfo(std::ostream& os = std::cout) const {
+    using SE3 = Sophus::SE3<Scalar>;
+
+    os << std::scientific << std::setprecision(6);
+    os << "\n================== CALIBRATION ==================\n";
+
+    size_t num_cams = T_i_c.size();
+    os << "Num cameras: " << num_cams << "\n\n";
+
+    for (size_t i = 0; i < num_cams; ++i) {
+      os << "---- Camera " << i << " ----\n";
+
+      // Intrinsics
+      os << "Intrinsics:\n  ";
+      for (int k = 0; k < intrinsics[i].getParam().size(); ++k)
+        os << intrinsics[i].getParam()[k] << " ";
+      os << "\n";
+
+      // Resolution
+      if (i < resolution.size()) {
+        os << "Resolution: "
+           << resolution[i].x() << " x "
+           << resolution[i].y() << "\n";
+      }
+
+      // Extrinsics
+      os << "T_i_c:\n" << T_i_c[i].matrix() << "\n\n";
+    }
+
+    os << "cam_time_offset_ns: " << cam_time_offset_ns << "\n\n";
+    os << "IMU update rate: " << imu_update_rate << "\n\n";
+
+    os << "Gyro noise std (continuous): " << gyro_noise_std.transpose() << "\n";
+    os << "Accel noise std (continuous): " << accel_noise_std.transpose() << "\n";
+
+    os << "Gyro noise std (discrete): " << dicrete_time_gyro_noise_std().transpose() << "\n";
+    os << "Accel noise std (discrete): " << dicrete_time_accel_noise_std().transpose() << "\n\n";
+
+    os << "Accel bias:\n  " << calib_accel_bias.getParam().transpose() << "\n";
+    os << "Gyro bias:\n  " << calib_gyro_bias.getParam().transpose() << "\n\n";
+
+    os << "Accel bias RW std: " << accel_bias_std.transpose() << "\n";
+    os << "Gyro bias RW std: " << gyro_bias_std.transpose() << "\n\n";
+
+    os << "Vignette splines: " << vignette.size() << "\n";
+    for (size_t i = 0; i < vignette.size(); ++i) {
+      os << "  Vignette[" << i << "] num knots: " << vignette[i].numKnots() << "\n";
+    }
+
+    os << "=================================================\n\n";
+  }
+
   /// @brief Cast to other scalar type
   template <class Scalar2>
   Calibration<Scalar2> cast() const {

@@ -105,44 +105,109 @@ bool estimateTransformation(
   return ransac.inliers_.size() > 8;
 }
 
+void CalibHelper::detectCornersMultiThread(const std::shared_ptr<CustomVioDataset>& vio_data,
+                            const AprilGrid& april_grid,
+                            CalibCornerMap& calib_corners,
+                            CalibCornerMap& calib_corners_rejected) {
+  calib_corners.clear();
+  calib_corners_rejected.clear();
+
+  tbb::parallel_for(
+      tbb::blocked_range<size_t>(0, vio_data->get_image_timestamps().size()),
+      [&](const tbb::blocked_range<size_t> &r) {
+        const int numTags = april_grid.getTagCols() * april_grid.getTagRows();
+        ApriltagDetector ad(numTags);
+
+        for (size_t j = r.begin(); j != r.end(); ++j) {
+          int64_t timestamp_ns = vio_data->get_image_timestamps()[j];
+          //           if(timestamp_ns==1520528005014933167){
+          //   continue;
+          // }
+          const std::vector<ImageData> &img_vec =
+              vio_data->get_image_data(timestamp_ns);
+
+          for (size_t i = 0; i < img_vec.size(); i++) {
+            if (img_vec[i].img.get()) {
+              CalibCornerData ccd_good;
+              CalibCornerData ccd_bad;
+              ad.detectTags(*img_vec[i].img, ccd_good.corners,
+                            ccd_good.corner_ids, ccd_good.radii,
+                            ccd_bad.corners, ccd_bad.corner_ids, ccd_bad.radii);
+
+
+                                    if (!ccd_good.corners.empty() && timestamp_ns==1520527971463884167) {
+          std::cout << "  -- GOOD CORNERS --\n";
+          for (size_t k = 0; k < ccd_good.corners.size(); k++) {
+            std::cout << "    id=" << ccd_good.corner_ids[k]
+                      << "  xy=(" << ccd_good.corners[k].x() << ", "
+                      << ccd_good.corners[k].y() << ")"
+                      << "  radius=" << ccd_good.radii[k]
+                      << "\n";
+          }
+        }
+
+
+                            //  std::cout << "image (" << timestamp_ns << ","
+                            //  << i
+                            //            << ")  detected " <<
+                            //            ccd_good.corners.size()
+                            //            << "corners (" <<
+                            //            ccd_bad.corners.size()
+                            //            << " rejected)" << std::endl;
+
+              TimeCamId tcid(timestamp_ns, i);
+
+              calib_corners.emplace(tcid, ccd_good);
+              calib_corners_rejected.emplace(tcid, ccd_bad);
+            }
+          }
+        }
+      });
+}
+
 void CalibHelper::detectCorners(const ManagedImage<uint16_t>::Ptr &image,
+                                int camId,
                                 const AprilGrid &april_grid,
                                 CalibCornerMap &calib_corners,
                                 CalibCornerMap &calib_corners_rejected,
-                                FrameId &frame_count) {
+                                FrameId &frame_count, std::shared_ptr<CustomVioDataset>& dataset) {
   // calib_corners.clear();
   // calib_corners_rejected.clear();
 
   const int numTags = april_grid.getTagCols() * april_grid.getTagRows();
   ApriltagDetector detector(numTags);
 
-  // tbb::parallel_for(
-  //     tbb::blocked_range<size_t>(0, vio_data->get_image_timestamps().size()),
-  //     [&](const tbb::blocked_range<size_t> &r) {
-
-  // for (size_t j = r.begin(); j != r.end(); ++j) {
-  //   int64_t timestamp_ns = vio_data->get_image_timestamps()[j];
-
-  // const std::vector<ImageData> &img_vec =
-  //     vio_data->get_image_data(timestamp_ns);
-
-  // for (size_t i = 0; i < img_vec.size(); i++) {
   if (image != nullptr) {
     CalibCornerData ccd_good;
     CalibCornerData ccd_bad;
-    detector.detectTags(*image, ccd_good.corners, ccd_good.corner_ids,
+    detector.detectTags(*image,ccd_good.corners, ccd_good.corner_ids,
                         ccd_good.radii, ccd_bad.corners, ccd_bad.corner_ids,
                         ccd_bad.radii);
 
-    std::cout << "image (" << frame_count << ")  detected "
-              << ccd_good.corners.size() << " corners ("
-              << ccd_bad.corners.size() << " rejected)" << std::endl;
+    std::cout << "\n=== IMAGE timestamp=" << frame_count
+                  << " cam=" << camId << " ===\n";
+        std::cout << "Good corners: " << ccd_good.corners.size()
+                  << " | Rejected: " << ccd_bad.corners.size() << "\n";
+
+    //     // ----- Stampa dettagliata good -----
+    //     if (!ccd_good.corners.empty()) {
+    //       std::cout << "  -- GOOD CORNERS --\n";
+    //       for (size_t k = 0; k < ccd_good.corners.size(); k++) {
+    //         std::cout << "    id=" << ccd_good.corner_ids[k]
+    //                   << "  xy=(" << ccd_good.corners[k].x() << ", "
+    //                   << ccd_good.corners[k].y() << ")"
+    //                   << "  radius=" << ccd_good.radii[k]
+    //                   << "\n";
+    //       }
+    //     }
 
     if (ccd_good.corners.size() > 0) {
-      TimeCamId tcid(frame_count, 0);
+      TimeCamId tcid(frame_count, camId);
 
       calib_corners.emplace(tcid, ccd_good);
       calib_corners_rejected.emplace(tcid, ccd_bad);
+      //dataset.add_image(image, camId, frame_count);
+      dataset->add_timestamp(frame_count);
     }
   }
   // }
@@ -151,7 +216,7 @@ void CalibHelper::detectCorners(const ManagedImage<uint16_t>::Ptr &image,
 }
 
 void CalibHelper::initCamPoses(
-    const Calibration<double>* calib,
+    const Calibration<double>::Ptr &calib,
     const Eigen::aligned_vector<Eigen::Vector4d> &aprilgrid_corner_pos_3d,
     CalibCornerMap &calib_corners, CalibInitPoseMap &calib_init_poses) {
   calib_init_poses.clear();
@@ -161,21 +226,6 @@ void CalibHelper::initCamPoses(
   for (const auto &kv : calib_corners) {
     corners.emplace_back(kv.first);
   }
-
-  // tbb::parallel_for(tbb::blocked_range<size_t>(0, corners.size()),
-  //                   [&](const tbb::blocked_range<size_t> &r) {
-  //                     for (size_t j = r.begin(); j != r.end(); ++j) {
-  //                       TimeCamId tcid = corners[j];
-  //                       const CalibCornerData &ccd = calib_corners.at(tcid);
-
-  //                       CalibInitPoseData cp;
-
-  //                       computeInitialPose(calib, tcid.cam_id,
-  //                                          aprilgrid_corner_pos_3d, ccd, cp);
-
-  //                       calib_init_poses.emplace(tcid, cp);
-  //                     }
-  //                   });
 
   for (size_t j = 0; j < corners.size(); ++j) {
     TimeCamId tcid = corners[j];
@@ -423,16 +473,15 @@ bool CalibHelper::initializeIntrinsicsPinhole(
 
   return true;
 }
-
 void CalibHelper::computeInitialPose(
-    const Calibration<double>* calib, size_t cam_id,
+    const Calibration<double>::Ptr &calib, size_t cam_id,
     const Eigen::aligned_vector<Eigen::Vector4d> &aprilgrid_corner_pos_3d,
     const CalibCornerData &cd, CalibInitPoseData &cp) {
-
   if (cd.corners.size() < 8) {
     cp.num_inliers = 0;
     return;
   }
+
   bool success;
   size_t num_inliers;
 

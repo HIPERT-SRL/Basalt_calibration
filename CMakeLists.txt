@@ -69,6 +69,7 @@ add_library(
     src/calibration/aprilgrid.cpp
     src/calibration/calibraiton_helper.cpp
     src/calibration/cam_calib.cpp
+    src/calibration/cam_imu_calib.cpp
 
 )
 

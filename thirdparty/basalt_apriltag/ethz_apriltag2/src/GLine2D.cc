@@ -1,5 +1,5 @@
 #include "apriltags/GLine2D.h"
-
+#include <iostream> 
 namespace AprilTags {
 
 GLine2D::GLine2D() 
@@ -16,7 +16,9 @@ GLine2D::GLine2D(const std::pair<float,float>& p1, const std::pair<float,float>&
 
 float GLine2D::getLineCoordinate(const std::pair<float,float>& pt) {
   normalizeSlope();
-  return pt.first*dx + pt.second*dy;
+  // Calcolo intermedio in double per evitare fluttuazioni FMA/Precision
+  double res = (double)pt.first * (double)dx + (double)pt.second * (double)dy;
+  return (float)res;
 }
 
 std::pair<float,float> GLine2D::getPointOfCoordinate(float coord) {
@@ -52,38 +54,53 @@ std::pair<float,float> GLine2D::intersectionWith(const GLine2D& line) const {
 }
 
 GLine2D GLine2D::lsqFitXYW(const std::vector<XYWeight>& xyweights) {
-  float Cxx=0, Cyy=0, Cxy=0, Ex=0, Ey=0, mXX=0, mYY=0, mXY=0, mX=0, mY=0;
-  float n=0;
+  float n = 0;
+  float sum_x = 0;
+  float sum_y = 0;
 
-  int idx = 0;
+  // Passata 1: Calcolo delle medie pesate (Ex, Ey)
   for (unsigned int i = 0; i < xyweights.size(); i++) {
-    float x = xyweights[i].x;
-    float y = xyweights[i].y;
     float alpha = xyweights[i].weight;
-
-    mY  += y*alpha;
-    mX  += x*alpha;
-    mYY += y*y*alpha;
-    mXX += x*x*alpha;
-    mXY += x*y*alpha;
-    n   += alpha;
-
-    idx++;
+    sum_x += xyweights[i].x * alpha;
+    sum_y += xyweights[i].y * alpha;
+    n     += alpha;
   }
+
+  if (n <= 0) return GLine2D(0, 1, std::make_pair(0.0f, 0.0f));
+
+  float Ex = sum_x / n;
+  float Ey = sum_y / n;
+
+  // Passata 2: Calcolo delle covarianze usando gli scarti dalla media
+  // Questo evita di maneggiare numeri enormi (x*x) e previene la cancellazione catastrofica.
+  float Cxx = 0, Cyy = 0, Cxy = 0;
+
+  for (unsigned int i = 0; i < xyweights.size(); i++) {
+    float alpha = xyweights[i].weight;
+    float dx = xyweights[i].x - Ex;
+    float dy = xyweights[i].y - Ey;
+
+    Cxx += dx * dx * alpha;
+    Cyy += dy * dy * alpha;
+    Cxy += dx * dy * alpha;
+  }
+
+  Cxx /= n;
+  Cyy /= n;
+  Cxy /= n;
+
+  // Debug stabile
+  // std::cout << "[Stabile] Ex: " << Ex << " Ey: " << Ey << std::endl;
+  // std::cout << "[Stabile] Cxx: " << Cxx << " Cxy: " << Cxy << " Cyy: " << Cyy << std::endl;
+
+  // Trova la direzione dominante
+  float phi = 0.5f * std::atan2(-2.0f * Cxy, (Cyy - Cxx));
   
-  Ex  = mX/n;
-  Ey  = mY/n;
-  Cxx = mXX/n - MathUtil::square(mX/n);
-  Cyy = mYY/n - MathUtil::square(mY/n);
-  Cxy = mXY/n - (mX/n)*(mY/n);
+  std::pair<float, float> pts(Ex, Ey);
 
-  // find dominant direction via SVD
-  float phi = 0.5f*std::atan2(-2*Cxy,(Cyy-Cxx));
-  // float rho = Ex*cos(phi) + Ey*sin(phi); //why is this needed if he never uses it?
-  std::pair<float,float> pts = std::pair<float,float>(Ex,Ey);
+  //std::cout << "phi: " << phi << " | pts: " << pts.first << "," << pts.second << std::endl;
 
-  // compute line parameters
-	return GLine2D(-std::sin(phi), std::cos(phi), pts);
+  return GLine2D(-std::sin(phi), std::cos(phi), pts);
 }
 
 void GLine2D::normalizeSlope() {

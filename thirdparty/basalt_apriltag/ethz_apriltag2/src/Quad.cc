@@ -1,4 +1,5 @@
-// #include <tkData/eigen.hpp>
+#include <Eigen/Dense>
+
 #include "apriltags/FloatImage.h"
 #include "apriltags/MathUtil.h"
 #include "apriltags/GLine2D.h"

@@ -1,9 +1,9 @@
-
 #include <basalt/utils/apriltag.h>
-
 #include <apriltags/TagDetector.h>
-
 #include <apriltags/Tag36h11.h>
+#include <opencv2/opencv.hpp>
+#include <iostream>
+#include <iomanip>
 
 namespace basalt {
 

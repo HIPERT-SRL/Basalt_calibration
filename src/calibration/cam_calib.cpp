@@ -48,12 +48,16 @@ namespace basalt {
 
 CamCalib::CamCalib(const std::string& aprilgrid_path,
                    const std::vector<std::string>& cam_types,
-                   double huber_thresh, double stop_thresh, bool load_corners)
+                   double huber_thresh, double stop_thresh, bool load_corners,
+                   int numCams)
     : april_grid(aprilgrid_path),
       cam_types(cam_types),
       huber_thresh(huber_thresh),
       stop_thresh(stop_thresh),
-      load_corners(load_corners) {}
+      load_corners(load_corners) {
+  dataset = std::make_shared<CustomVioDataset>();
+  dataset->set_num_cams(numCams);
+}
 
 CamCalib::~CamCalib() {}
 
@@ -64,6 +68,10 @@ void CamCalib::setImageSize(size_t width, size_t height) {
 
   corners_distribution = cv::Mat(cv::Size(image_width, image_height), CV_8UC3,
                                  cv::Scalar(255, 255, 255));
+}
+
+std::string CamCalib::serializeCalib() {
+  return calib_opt->serializeCalib();
 }
 
 void CamCalib::optimizeUntilConvergence() {
@@ -78,8 +86,16 @@ void CamCalib::setCornerDetectionImage(const cv::Mat& corners_image) {
   corners_detection = corners_image;
 }
 
+void CamCalib::detectCornersMultiThread() {
+    CalibHelper::detectCornersMultiThread(this->dataset, this->april_grid,
+                               this->calib_corners,
+                               this->calib_corners_rejected);
+
+}
+
 bool CamCalib::detectCorners(const ManagedImage<uint16_t>::Ptr& image,
-                             FrameId& frame_count, std::string& path) {
+                             int camId, FrameId& frame_count,
+                             std::string& path) {
   if (load_corners) {
     std::ifstream is(path, std::ios::binary);
 
@@ -99,11 +115,12 @@ bool CamCalib::detectCorners(const ManagedImage<uint16_t>::Ptr& image,
     }
     load_corners = false;
   }
-  std ::cout << "Started detecting corners" << std::endl;
+  //std ::cout << "Started detecting corners" << std::endl;
 
   size_t num_corners_before = this->calib_corners.size();
-  CalibHelper::detectCorners(image, this->april_grid, this->calib_corners,
-                             this->calib_corners_rejected, frame_count);
+  CalibHelper::detectCorners(image, camId, this->april_grid,
+                             this->calib_corners, this->calib_corners_rejected,
+                             frame_count, this->dataset);
   for (auto& corner : this->calib_corners) {
     for (auto& point : corner.second.corners) {
       cv::circle(corners_distribution, cv::Point2f(point.x(), point.y()), 1,
@@ -115,7 +132,7 @@ bool CamCalib::detectCorners(const ManagedImage<uint16_t>::Ptr& image,
 
   bool found = num_corners_after > num_corners_before;
   if (found) {
-    TimeCamId tcid(static_cast<FrameId>(num_corners_after - 1), 0);
+    TimeCamId tcid(frame_count, camId);
     auto& corner = this->calib_corners.at(tcid);
     for (auto& point : corner.corners) {
       cv::circle(corners_detection, cv::Point2f(point.x(), point.y()), 1,
@@ -154,90 +171,133 @@ void CamCalib::initCamIntrinsics() {
     return;
   }
 
-  std::cout << "Started camera intrinsics initialization" << std::endl;
+  std::cout << "Started camera intrinsics initialization: "
+            << dataset->get_num_cams() << " cams" << std::endl;
 
   if (!calib_opt) {
     calib_opt.reset(new PosesOptimization);
   }
 
-  calib_opt->resetCalib(1, cam_types);
+  calib_opt->resetCalib(dataset->get_num_cams(), cam_types);
 
-  std::vector<bool> cam_initialized(1, false);
+  std::vector<bool> cam_initialized(dataset->get_num_cams(), false);
 
   int inc = 1;
   size_t num_frames = this->calib_corners.size();
 
-  for (size_t i = 0; i < num_frames; i += inc) {
-    TimeCamId tcid(static_cast<FrameId>(i), 0);
+  for (size_t j = 0; j < dataset->get_num_cams(); j++) {
+    for (size_t i = 0; i < dataset->get_image_timestamps().size(); i += inc) {
+      const int64_t timestamp_ns = dataset->get_image_timestamps()[i];
+      const std::vector<basalt::ImageData>& img_vec =
+          dataset->get_image_data(timestamp_ns);
 
-    if (calib_corners.find(tcid) != calib_corners.end()) {
-      CalibCornerData cid = calib_corners.at(tcid);
+      TimeCamId tcid(timestamp_ns, j);
 
-      Eigen::Vector4d init_intr;
+      if (calib_corners.find(tcid) != calib_corners.end()) {
+        CalibCornerData cid = calib_corners.at(tcid);
 
-      bool success = CalibHelper::initializeIntrinsics(
-          cid.corners, cid.corner_ids, april_grid, this->image_width,
-          this->image_height, init_intr);
+        Eigen::Vector4d init_intr;
+        std::cout << cid.corners.size() << " corners" << std::endl;
+        std::cout << cid.corner_ids.size() << " ids" << std::endl;
+        bool success = CalibHelper::initializeIntrinsics(
+            cid.corners, cid.corner_ids, april_grid, this->image_width,
+            this->image_height, init_intr);
 
-      if (success) {
-        cam_initialized[0] = true;
-        calib_opt->calib->intrinsics[0].setFromInit(init_intr);
-        break;
+        if (success) {
+          cam_initialized[j] = true;
+          calib_opt->calib->intrinsics[j].setFromInit(init_intr);
+          break;
+        }
       }
     }
   }
-  if (!cam_initialized[0]) {
-    std::vector<CalibCornerData*> pinhole_corners;
-    int w = 0;
-    int h = 0;
+  // Try perfect pinhole initialization for cameras that are not initalized.
+  for (size_t j = 0; j < dataset->get_num_cams(); j++) {
+    if (!cam_initialized[j]) {
+      std::vector<CalibCornerData*> pinhole_corners;
+      int w = 0;
+      int h = 0;
 
-    for (size_t i = 0; i < num_frames; i += inc) {
-      TimeCamId tcid(static_cast<FrameId>(i), 0);
+      for (size_t i = 0; i < dataset->get_image_timestamps().size(); i += inc) {
+        const int64_t timestamp_ns = dataset->get_image_timestamps()[i];
+        const std::vector<basalt::ImageData>& img_vec =
+            dataset->get_image_data(timestamp_ns);
 
-      auto it = calib_corners.find(tcid);
-      if (it != calib_corners.end()) {
-        if (it->second.corners.size() > 8) {
-          pinhole_corners.emplace_back(&it->second);
+        TimeCamId tcid(timestamp_ns, j);
+
+        auto it = calib_corners.find(tcid);
+        if (it != calib_corners.end()) {
+          if (it->second.corners.size() > 8) {
+            pinhole_corners.emplace_back(&it->second);
+          }
         }
+
+        w = img_vec[j].img->w;
+        h = img_vec[j].img->h;
       }
 
-      std::cout << pinhole_corners.size() << std::endl;
+      BASALT_ASSERT(w > 0 && h > 0);
 
-      w = image_width;
-      h = image_height;
-    }
+      Eigen::Vector4d init_intr;
 
-    BASALT_ASSERT(w > 0 && h > 0);
+      bool success = CalibHelper::initializeIntrinsicsPinhole(
+          pinhole_corners, april_grid, w, h, init_intr);
 
-    Eigen::Vector4d init_intr;
+      if (success) {
+        cam_initialized[j] = true;
 
-    bool success = CalibHelper::initializeIntrinsicsPinhole(
-        pinhole_corners, april_grid, w, h, init_intr);
-
-    if (success) {
-      cam_initialized[0] = true;
-
-      std::cout << "Initialized camera " << 0
-                << " with pinhole model. You should set pinhole model for "
-                   "this camera!"
-                << std::endl;
-      calib_opt->calib->intrinsics[0].setFromInit(init_intr);
+        std::cout << "Initialized camera " << j
+                  << " with pinhole model. You should set pinhole model for "
+                     "this camera!"
+                  << std::endl;
+        calib_opt->calib->intrinsics[j].setFromInit(init_intr);
+      }
     }
   }
 
   std::cout << "Done camera intrinsics initialization:" << std::endl;
-  std::cout << "Cam " << 0 << ": "
-            << calib_opt->calib->intrinsics[0].getParam().transpose()
-            << std::endl;
+  for (size_t j = 0; j < dataset->get_num_cams(); j++) {
+    std::cout << "Cam " << j << ": "
+              << calib_opt->calib->intrinsics[j].getParam().transpose()
+              << std::endl;
+  }
 
   // set resolution
   {
+    size_t img_idx = 1;
+    int64_t t_ns = dataset->get_image_timestamps()[img_idx];
+    auto img_data = dataset->get_image_data(t_ns);
+
+    // // Find the frame with all valid images
+    // while (img_idx < dataset.get_image_timestamps().size()) {
+    //   bool img_data_valid = true;
+    //   for (size_t i = 0; i < dataset.get_num_cams(); i++) {
+    //     if (!img_data[i].img.get()) img_data_valid = false;
+    //   }
+
+    //   if (!img_data_valid) {
+    //     img_idx++;
+    //     int64_t t_ns_new = dataset.get_image_timestamps()[img_idx];
+    //     img_data = dataset.get_image_data(t_ns_new);
+    //   } else {
+    //     break;
+    //   }
+    // }
+
     Eigen::aligned_vector<Eigen::Vector2i> res;
-    res.emplace_back(this->image_width, this->image_height);
+    for (size_t i = 0; i < dataset->get_num_cams(); i++) {
+      res.emplace_back(this->image_width, this->image_height);
+    }
 
     calib_opt->setResolution(res);
   }
 }
+
+
+void CamCalib::addImage(const ManagedImage<uint16_t>::Ptr& image, int camId,
+                int64_t timestamp_ns){
+                  dataset->add_image(image, camId, timestamp_ns);
+                }
 
 void CamCalib::initCamPoses() {
   if (calib_corners.empty()) {
@@ -255,10 +315,12 @@ void CamCalib::initCamPoses() {
   }
 
   std::cout << "Started initial camera pose computation " << std::endl;
-
+  std::cout << april_grid.aprilgrid_corner_pos_3d.at(0) << std::endl;
+  std::cout << april_grid.aprilgrid_corner_pos_3d.at(1) << std::endl;
+  std::cout << april_grid.aprilgrid_corner_pos_3d.at(2) << std::endl;
+  std::cout << april_grid.aprilgrid_corner_pos_3d.at(3) << std::endl;
   const Calibration<double>* test = calib_opt->calib.get();
-
-  CalibHelper::initCamPoses(calib_opt->calib.get(),
+  CalibHelper::initCamPoses(calib_opt->calib,
                             april_grid.aprilgrid_corner_pos_3d,
                             this->calib_corners, this->calib_init_poses);
 
@@ -266,70 +328,148 @@ void CamCalib::initCamPoses() {
 }
 
 void CamCalib::initCamExtrinsics() {
+  std::cout << "\n=== initCamExtrinsics() ===\n";
+
   if (calib_init_poses.empty()) {
-    std::cerr << "No initial camera poses. Press init_cam_poses initialize "
-                 "camera poses "
-              << std::endl;
+    std::cerr
+        << "[ERROR] No initial camera poses. Press init_cam_poses first.\n";
     return;
   }
 
   if (!calib_opt.get() || !calib_opt->calibInitialized()) {
-    std::cerr << "No initial intrinsics. Press init_intrinsics initialize "
-                 "intrinsics"
-              << std::endl;
+    std::cerr
+        << "[ERROR] No initial intrinsics. Press init_intrinsics first.\n";
     return;
   }
 
+  std::cout << "[INFO] Number of cameras: " << dataset->get_num_cams() << "\n";
+  std::cout << "[INFO] Number of timestamps: "
+            << dataset->get_image_timestamps().size() << "\n";
+
+  // Camera graph
   std::map<std::pair<size_t, size_t>, std::pair<int, int64_t>> cam_graph;
 
-  // Construct the graph.
+  std::cout << "[INFO] Building camera graph...\n";
 
-  size_t num_frames = this->calib_corners.size();
-  for (size_t i = 0; i < num_frames; i++) {
-    TimeCamId tcid_i(static_cast<FrameId>(i), 0);
+  // ---- Construct camera graph ----
+  for (size_t i = 0; i < dataset->get_image_timestamps().size(); i++) {
+    int64_t timestamp_ns = dataset->get_image_timestamps()[i];
+    for (size_t cam_i = 0; cam_i < dataset->get_num_cams(); cam_i++) {
+      TimeCamId tcid_i(timestamp_ns, cam_i);
 
-    auto it = calib_init_poses.find(tcid_i);
-    if (it == calib_init_poses.end() || it->second.num_inliers < MIN_CORNERS)
-      continue;
+      auto it_i = calib_init_poses.find(tcid_i);
+      if (it_i == calib_init_poses.end() ||
+          it_i->second.num_inliers < MIN_CORNERS) {
+        continue;
+      }
+
+      for (size_t cam_j = cam_i + 1; cam_j < dataset->get_num_cams(); cam_j++) {
+        TimeCamId tcid_j(timestamp_ns, cam_j);
+
+        auto it_j = calib_init_poses.find(tcid_j);
+        if (it_j == calib_init_poses.end() ||
+            it_j->second.num_inliers < MIN_CORNERS) {
+          continue;
+        }
+
+        auto edge_id = std::make_pair(cam_i, cam_j);
+
+        int new_weight =
+            std::min(it_i->second.num_inliers, it_j->second.num_inliers);
+        //std::cout << "New weight: " << new_weight << std::endl;
+        int old_weight = cam_graph[edge_id].first;
+
+        if (new_weight > old_weight) {
+          cam_graph[edge_id] = {new_weight, timestamp_ns};
+
+          std::cout << "  [GRAPH] edge (" << cam_i << "," << cam_j
+                    << ") updated: weight=" << new_weight
+                    << " ts=" << timestamp_ns << "\n";
+        }
+      }
+    }
   }
 
-  std::vector<bool> cameras_initialized(1, false);
+  std::cout << "[INFO] Camera graph built with " << cam_graph.size()
+            << " edges\n";
+
+  // --- Initialize extrinsics ---
+  std::vector<bool> cameras_initialized(dataset->get_num_cams(), false);
   cameras_initialized[0] = true;
   size_t last_camera = 0;
-  calib_opt->calib->T_i_c[0] = Sophus::SE3d();  // Identity
+
+  calib_opt->calib->T_i_c[0] = Sophus::SE3d();
+  std::cout << "[INFO] Camera 0 set as reference (identity)\n";
 
   auto next_max_weight_edge = [&](size_t cam_id) {
     int max_weight = -1;
-    std::pair<int, int64_t> res(-1, -1);
+    std::pair<int, int64_t> best(-1, -1);
 
-    for (size_t i = 0; i < 1; i++) {
+    for (size_t i = 0; i < dataset->get_num_cams(); i++) {
       if (cameras_initialized[i]) continue;
 
-      std::pair<size_t, size_t> edge_id;
+      std::pair<size_t, size_t> edge =
+          (i < cam_id) ? std::make_pair(i, cam_id) : std::make_pair(cam_id, i);
 
-      if (i < cam_id) {
-        edge_id = std::make_pair(i, cam_id);
-      } else if (i > cam_id) {
-        edge_id = std::make_pair(cam_id, i);
-      }
-
-      auto it = cam_graph.find(edge_id);
-      if (it != cam_graph.end() && max_weight < it->second.first) {
-        max_weight = it->second.first;
-        res.first = i;
-        res.second = it->second.second;
+      auto it = cam_graph.find(edge);
+      if (it != cam_graph.end()) {
+        int w = it->second.first;
+        if (w > max_weight) {
+          max_weight = w;
+          best = {i, it->second.second};
+        }
       }
     }
 
-    return res;
+    std::cout << "  [SELECT] From cam " << cam_id
+              << " best next cam=" << best.first << " weight=" << max_weight
+              << " ts=" << best.second << "\n";
+
+    return best;
   };
 
-  std::cout << "Done camera extrinsics initialization:" << std::endl;
-  for (size_t j = 0; j < 1; j++) {
-    std::cout << "T_c0_c" << j << ":\n"
-              << calib_opt->calib->T_i_c[j].matrix() << std::endl;
+  // ---- Extrinsics chain solving ----
+  for (size_t i = 0; i < dataset->get_num_cams() - 1; i++) {
+    auto res = next_max_weight_edge(last_camera);
+
+    std::cout << "[INFO] Initializing camera pair " << last_camera << " -> "
+              << res.first << "\n";
+
+    if (res.first < 0) {
+      std::cerr
+          << "[WARN] No connected cameras left. Graph may be disconnected.\n";
+      break;
+    }
+
+    size_t new_cam = res.first;
+    int64_t ts = res.second;
+
+    TimeCamId tc_last(ts, last_camera);
+    TimeCamId tc_new(ts, new_cam);
+
+    std::cout << "[INFO] Solving extrinsics for pair (" << last_camera << ", "
+              << new_cam << ") at timestamp " << ts << "\n";
+
+    auto& pose_last = calib_init_poses.at(tc_last);
+    auto& pose_new = calib_init_poses.at(tc_new);
+
+    std::cout << "  [DEBUG] last_cam inliers=" << pose_last.num_inliers
+              << " new_cam inliers=" << pose_new.num_inliers << "\n";
+
+    calib_opt->calib->T_i_c[new_cam] = calib_opt->calib->T_i_c[last_camera] *
+                                       pose_last.T_a_c.inverse() *
+                                       pose_new.T_a_c;
+
+    cameras_initialized[new_cam] = true;
+    last_camera = new_cam;
   }
-}  // namespace basalt
+
+  std::cout << "\n=== Camera extrinsics initialization DONE ===\n";
+  for (size_t j = 0; j < dataset->get_num_cams(); j++) {
+    std::cout << "T_c0_c" << j << ":\n"
+              << calib_opt->calib->T_i_c[j].matrix() << "\n\n";
+  }
+}
 
 void CamCalib::initOptimization() {
   if (!calib_opt) {
@@ -353,13 +493,14 @@ void CamCalib::initOptimization() {
       invalid_frames.insert(kv.first);
   }
 
-  size_t num_frames = this->calib_corners.size();
-  for (size_t j = 0; j < num_frames; ++j) {
+  for (size_t j = 0; j < dataset->get_image_timestamps().size(); ++j) {
+    int64_t timestamp_ns = dataset->get_image_timestamps()[j];
+
     int max_inliers = -1;
     int max_inliers_idx = -1;
 
     for (size_t cam_id = 0; cam_id < calib_opt->calib->T_i_c.size(); cam_id++) {
-      TimeCamId tcid(static_cast<FrameId>(j), cam_id);
+      TimeCamId tcid(timestamp_ns, cam_id);
       const auto cp_it = calib_init_poses.find(tcid);
       if (cp_it != calib_init_poses.end()) {
         if ((int)cp_it->second.num_inliers > max_inliers) {
@@ -370,19 +511,18 @@ void CamCalib::initOptimization() {
     }
 
     if (max_inliers >= (int)MIN_CORNERS) {
-      TimeCamId tcid(static_cast<FrameId>(j), max_inliers_idx);
+      TimeCamId tcid(timestamp_ns, max_inliers_idx);
       const auto cp_it = calib_init_poses.find(tcid);
 
       // Initial pose
       calib_opt->addPoseMeasurement(
-          static_cast<FrameId>(j),
-          cp_it->second.T_a_c *
-              calib_opt->calib->T_i_c[max_inliers_idx].inverse());
+          timestamp_ns, cp_it->second.T_a_c *
+                            calib_opt->calib->T_i_c[max_inliers_idx].inverse());
     } else {
       // Set all frames invalid if we do not have initial pose
       for (size_t cam_id = 0; cam_id < calib_opt->calib->T_i_c.size();
            cam_id++) {
-        invalid_frames.emplace(static_cast<FrameId>(j), cam_id);
+        invalid_frames.emplace(timestamp_ns, cam_id);
       }
     }
   }
@@ -426,6 +566,8 @@ bool CamCalib::optimizeWithParam(bool print_info,
 
     auto start = std::chrono::high_resolution_clock::now();
 
+    std::cout << "huber_thresh: " << huber_thresh << std::endl;
+    std::cout << "stop_thresh: " << stop_thresh << std::endl;
     converged = calib_opt->optimize(true, huber_thresh, stop_thresh, error,
                                     num_points, reprojection_error);
 
@@ -473,24 +615,28 @@ bool CamCalib::optimizeWithParam(bool print_info,
 void CamCalib::saveCalib(double& fx, double& fy, double& cx, double& cy,
                          double& k0, double& k1, double& k2, double& k3) {
   if (calib_opt) {
-    Eigen::VectorXd values =
-        calib_opt->calib->intrinsics[0].getParam().transpose();
+    for (int i = 0; i < dataset->get_num_cams(); i++) {
+      Eigen::VectorXd values =
+          calib_opt->calib->intrinsics[i].getParam().transpose();
 
-    fx = values[0];
-    fy = values[1];
-    cx = values[2];
-    cy = values[3];
+      fx = values[0];
+      fy = values[1];
+      cx = values[2];
+      cy = values[3];
 
-    k0 = values[4];
-    k1 = values[5];
-    k2 = values[6];
-    k3 = values[7];
+      k0 = values[4];
+      k1 = values[5];
+      k2 = values[6];
+      k3 = values[7];
 
-    std::cout << " fx: " << fx << " fy: " << fy << " cx: " << cx << " cy: " << cy
-              << " k0: " << k0 << " k1: " << k1 << " k2: " << k2 << " k3: " << k3
-              << std::endl;
+      std::cout << " fx: " << fx << " fy: " << fy << " cx: " << cx
+                << " cy: " << cy << " k0: " << k0 << " k1: " << k1
+                << " k2: " << k2 << " k3: " << k3 << std::endl;
 
-    std::cout << "Saved calibration " << std::endl;
+      auto extr = calib_opt->calib->T_i_c[i];
+      std::cout << "T_i_c: " << extr.matrix() << std::endl;
+      std::cout << "Saved calibration " << std::endl;
+    }
   }
 }
 

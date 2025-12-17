@@ -157,7 +157,13 @@ class SplineOptimization {
                 << std::endl;
     }
   }
+  void loadCalibFromString(const std::string &json_str) {
+    std::stringstream ss(json_str);
+    cereal::JSONInputArchive archive(ss);
 
+    calib.reset(new Calibration<Scalar>);
+    archive(*calib);
+}
   void saveCalib(const std::string& path) const {
     if (calib) {
       std::ofstream os(path + "calibration.json");

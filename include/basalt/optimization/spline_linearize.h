@@ -42,7 +42,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <basalt/optimization/linearize.h>
 
-#include <basalt/utils/test_utils.h>
 
 #include <tbb/blocked_range.h>
 

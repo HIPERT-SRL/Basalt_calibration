@@ -41,6 +41,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "basalt/image/image.h"
 
 #include <tbb/concurrent_unordered_map.h>
+#include <basalt/io/dataset_io_custom.h>
 
 namespace basalt {
 
@@ -79,13 +80,20 @@ using CalibInitPoseMap =
 class CalibHelper {
  public:
   static void detectCorners(const ManagedImage<uint16_t>::Ptr& image,
+                            int camId,
                             const AprilGrid& april_grid,
                             CalibCornerMap& calib_corners,
                             CalibCornerMap& calib_corners_rejected,
-                            FrameId& frame_count);
+                            FrameId& frame_count,
+                            std::shared_ptr<CustomVioDataset>& dataset);
+
+static void detectCornersMultiThread(const std::shared_ptr<CustomVioDataset>& vio_data,
+                            const AprilGrid& april_grid,
+                            CalibCornerMap& calib_corners,
+                            CalibCornerMap& calib_corners_rejected);
 
   static void initCamPoses(
-      const Calibration<double>* calib,
+      const Calibration<double>::Ptr& calib,
       const Eigen::aligned_vector<Eigen::Vector4d>& aprilgrid_corner_pos_3d,
       CalibCornerMap& calib_corners, CalibInitPoseMap& calib_init_poses);
 
@@ -107,7 +115,7 @@ class CalibHelper {
   }
 
   static void computeInitialPose(
-      const Calibration<double>* calib, size_t cam_id,
+      const Calibration<double>::Ptr& calib, size_t cam_id,
       const Eigen::aligned_vector<Eigen::Vector4d>& aprilgrid_corner_pos_3d,
       const basalt::CalibCornerData& cd, basalt::CalibInitPoseData& cp);
 

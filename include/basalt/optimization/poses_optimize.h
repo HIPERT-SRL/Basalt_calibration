@@ -240,6 +240,15 @@ class PosesOptimization {
     ccd.offset_intrinsics = &offset_cam_intrinsics;
   }
 
+  std::string serializeCalib() const {
+    std::stringstream ss;
+    {
+        cereal::JSONOutputArchive archive(ss);
+        archive(*calib);
+    }
+    return ss.str();
+}
+
   void addAprilgridMeasurement(
       int64_t t_ns, int cam_id,
       const Eigen::aligned_vector<Eigen::Vector2d> &corners_pos,

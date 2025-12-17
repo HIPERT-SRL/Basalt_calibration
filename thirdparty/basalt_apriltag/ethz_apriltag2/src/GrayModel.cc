@@ -1,7 +1,6 @@
 #include <iostream>
 
-// #include <tkData/eigen.hpp>
-
+#include <Eigen/Dense>
 #include <Eigen/LU>
 
 #include "apriltags/GrayModel.h"

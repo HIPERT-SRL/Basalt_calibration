@@ -41,7 +41,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // #include <pangolin/image/typed_image.h>
 // #include <pangolin/pangolin.h>
 
-#include "Eigen/Dense"
+#include <Eigen/Dense>
 
 #include <iostream>
 #include <limits>
@@ -49,101 +49,134 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <basalt/calibration/aprilgrid.h>
 #include <basalt/calibration/calibration_helper.h>
-#include <basalt/image/image.h>
 #include <basalt/utils/sophus_utils.hpp>
 #include <basalt/io/dataset_io.h>
 #include <basalt/io/dataset_io_custom.h>
 
-#include <opencv2/core/mat.hpp>
-#include <opencv2/highgui.hpp>
-#include <opencv2/imgproc.hpp>
-
 namespace basalt {
 
-class PosesOptimization;
+template <int N, typename Scalar>
+class SplineOptimization;
 
-class CamCalib {
+class CamImuCalib {
  public:
-  CamCalib(const std::string& aprilgrid_path,
-           const std::vector<std::string>& cam_types, double huber_thresh,
-           double stop_thresh, bool load_corners, int numCams);
+  CamImuCalib(const std::string& aprilgrid_path, int numCams,
+    std::shared_ptr<CustomVioDataset> dataset, CalibCornerMap calib_corners,
+  CalibCornerMap calib_corners_rejected, std::string camCalibJson);
 
-  ~CamCalib();
+  ~CamImuCalib();
 
-  bool detectCorners(const ManagedImage<uint16_t>::Ptr& image, int camId,
-                     FrameId& frame_count, std::string& path);
+  void initGui();
 
- void detectCornersMultiThread();
-  void setImageSize(size_t width, size_t height);
+  void setNumCameras(size_t n);
 
-  void addImage(const ManagedImage<uint16_t>::Ptr& image, int camId,
-                int64_t timestamp_ns);
+  void renderingLoop();
 
-  const CalibCornerMap& getCorners();
+  void computeProjections();
 
-
-  std::string serializeCalib();
-
-  void saveCorners(const std::string& path);
-
-  void setCornerDetectionImage(const cv::Mat& corners_image);
-
-  void getCornersDistribution(cv::Mat& image);
-
-  void getCornersDetection(cv::Mat& image);
-
-  const AprilGrid& GetAprilGrid();
-
-  void initCamIntrinsics();
+  void detectCorners();
 
   void initCamPoses();
 
-  void initCamExtrinsics();
+  void initCamImuTransform();
 
   void initOptimization();
 
-  void optimizeUntilConvergence();
+  void initMocap();
+
+  void loadDataset();
 
   void optimize();
 
   bool optimizeWithParam(bool print_info,
-                         std::map<std::string, double>* stats = nullptr);
+                         std::map<std::string, double> *stats = nullptr);
 
-  void saveCalib(double& fx, double& fy, double& cx, double& cy, double& k0,
-                 double& k1, double& k2, double& k3);
+  void saveCalib();
 
- std::shared_ptr<CustomVioDataset> getDataset() { return dataset; }
- CalibCornerMap& getCalibCorners() { return calib_corners; }
- CalibCornerMap& getCalibCornersRejected() { return calib_corners_rejected; }
- CalibInitPoseMap& getCalibInitPoses() { return calib_init_poses; }
+  void saveMocapCalib();
+
+  void recomputeDataLog();
+
+  void optimizeUntilConvergence();
+
+  void drawPlots();
+
+  bool hasCorners() const;
+
+
  private:
   static constexpr int UI_WIDTH = 300;
 
-  static constexpr size_t RANSAC_THRESHOLD = 10;
-
-  int image_width;
-  int image_height;
-
+  VioDatasetPtr vio_dataset;
   std::shared_ptr<CustomVioDataset> dataset;
+
   CalibCornerMap calib_corners;
   CalibCornerMap calib_corners_rejected;
   CalibInitPoseMap calib_init_poses;
 
-  std::shared_ptr<PosesOptimization> calib_opt;
+  std::shared_ptr<std::thread> processing_thread;
+
+  std::shared_ptr<SplineOptimization<5, double>> calib_opt;
+
+  std::map<TimeCamId, ProjectedCornerData> reprojected_corners;
+
+  std::string dataset_path;
+  std::string dataset_type;
 
   AprilGrid april_grid;
 
-  std::vector<std::string> cam_types;
+  std::string cache_path;
+  std::string cache_dataset_name;
+  std::string camCalibJson;
+
+  int skip_images;
+
+  bool show_gui;
 
   const size_t MIN_CORNERS = 15;
 
+  std::vector<double> imu_noise;
+
+  // //////////////////////
+
+  // pangolin::Var<int> show_frame;
+
+  // pangolin::Var<bool> show_corners;
+  // pangolin::Var<bool> show_corners_rejected;
+  // pangolin::Var<bool> show_init_reproj;
+  // pangolin::Var<bool> show_opt;
+  // pangolin::Var<bool> show_ids;
+
+  // pangolin::Var<bool> show_accel;
+  // pangolin::Var<bool> show_gyro;
+  // pangolin::Var<bool> show_pos;
+  // pangolin::Var<bool> show_rot_error;
+
+  // pangolin::Var<bool> show_mocap;
+  // pangolin::Var<bool> show_mocap_rot_error;
+  // pangolin::Var<bool> show_mocap_rot_vel;
+
+  // pangolin::Var<bool> show_spline;
+  // pangolin::Var<bool> show_data;
+
+  bool opt_intr;
+  bool opt_poses;
+  bool opt_corners;
+  bool opt_cam_time_offset;
+  bool opt_imu_scale;
+  bool opt_mocap;
+
   double huber_thresh;
+
+  // pangolin::Var<bool> opt_until_convg;
   double stop_thresh;
 
-  bool load_corners;
+  // pangolin::Plotter *plotter;
+  // pangolin::View *img_view_display;
 
-  cv::Mat corners_distribution;
-  cv::Mat corners_detection;
+  // std::vector<std::shared_ptr<pangolin::ImageView>> img_view;
+
+  // pangolin::DataLog imu_data_log, pose_data_log, mocap_data_log, vign_data_log;
 };
 
 }  // namespace basalt
