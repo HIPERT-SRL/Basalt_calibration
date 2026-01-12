@@ -74,12 +74,15 @@ std::string CamCalib::serializeCalib() {
   return calib_opt->serializeCalib();
 }
 
-void CamCalib::optimizeUntilConvergence() {
+double CamCalib::optimizeUntilConvergence() {
   bool converged = false;
-
+  double error;
   while (!converged) {
-    converged = optimizeWithParam(true);
+    auto result = optimizeWithParam(true);
+    converged = result.first;
+    error = result.second;
   }
+  return error;
 }
 
 void CamCalib::setCornerDetectionImage(const cv::Mat& corners_image) {
@@ -197,8 +200,6 @@ void CamCalib::initCamIntrinsics() {
         CalibCornerData cid = calib_corners.at(tcid);
 
         Eigen::Vector4d init_intr;
-        std::cout << cid.corners.size() << " corners" << std::endl;
-        std::cout << cid.corner_ids.size() << " ids" << std::endl;
         bool success = CalibHelper::initializeIntrinsics(
             cid.corners, cid.corner_ids, april_grid, this->image_width,
             this->image_height, init_intr);
@@ -315,10 +316,6 @@ void CamCalib::initCamPoses() {
   }
 
   std::cout << "Started initial camera pose computation " << std::endl;
-  std::cout << april_grid.aprilgrid_corner_pos_3d.at(0) << std::endl;
-  std::cout << april_grid.aprilgrid_corner_pos_3d.at(1) << std::endl;
-  std::cout << april_grid.aprilgrid_corner_pos_3d.at(2) << std::endl;
-  std::cout << april_grid.aprilgrid_corner_pos_3d.at(3) << std::endl;
   const Calibration<double>* test = calib_opt->calib.get();
   CalibHelper::initCamPoses(calib_opt->calib,
                             april_grid.aprilgrid_corner_pos_3d,
@@ -342,14 +339,8 @@ void CamCalib::initCamExtrinsics() {
     return;
   }
 
-  std::cout << "[INFO] Number of cameras: " << dataset->get_num_cams() << "\n";
-  std::cout << "[INFO] Number of timestamps: "
-            << dataset->get_image_timestamps().size() << "\n";
-
   // Camera graph
   std::map<std::pair<size_t, size_t>, std::pair<int, int64_t>> cam_graph;
-
-  std::cout << "[INFO] Building camera graph...\n";
 
   // ---- Construct camera graph ----
   for (size_t i = 0; i < dataset->get_image_timestamps().size(); i++) {
@@ -376,22 +367,15 @@ void CamCalib::initCamExtrinsics() {
 
         int new_weight =
             std::min(it_i->second.num_inliers, it_j->second.num_inliers);
-        //std::cout << "New weight: " << new_weight << std::endl;
         int old_weight = cam_graph[edge_id].first;
 
         if (new_weight > old_weight) {
           cam_graph[edge_id] = {new_weight, timestamp_ns};
 
-          std::cout << "  [GRAPH] edge (" << cam_i << "," << cam_j
-                    << ") updated: weight=" << new_weight
-                    << " ts=" << timestamp_ns << "\n";
         }
       }
     }
   }
-
-  std::cout << "[INFO] Camera graph built with " << cam_graph.size()
-            << " edges\n";
 
   // --- Initialize extrinsics ---
   std::vector<bool> cameras_initialized(dataset->get_num_cams(), false);
@@ -399,7 +383,6 @@ void CamCalib::initCamExtrinsics() {
   size_t last_camera = 0;
 
   calib_opt->calib->T_i_c[0] = Sophus::SE3d();
-  std::cout << "[INFO] Camera 0 set as reference (identity)\n";
 
   auto next_max_weight_edge = [&](size_t cam_id) {
     int max_weight = -1;
@@ -421,10 +404,6 @@ void CamCalib::initCamExtrinsics() {
       }
     }
 
-    std::cout << "  [SELECT] From cam " << cam_id
-              << " best next cam=" << best.first << " weight=" << max_weight
-              << " ts=" << best.second << "\n";
-
     return best;
   };
 
@@ -432,12 +411,7 @@ void CamCalib::initCamExtrinsics() {
   for (size_t i = 0; i < dataset->get_num_cams() - 1; i++) {
     auto res = next_max_weight_edge(last_camera);
 
-    std::cout << "[INFO] Initializing camera pair " << last_camera << " -> "
-              << res.first << "\n";
-
     if (res.first < 0) {
-      std::cerr
-          << "[WARN] No connected cameras left. Graph may be disconnected.\n";
       break;
     }
 
@@ -447,14 +421,8 @@ void CamCalib::initCamExtrinsics() {
     TimeCamId tc_last(ts, last_camera);
     TimeCamId tc_new(ts, new_cam);
 
-    std::cout << "[INFO] Solving extrinsics for pair (" << last_camera << ", "
-              << new_cam << ") at timestamp " << ts << "\n";
-
     auto& pose_last = calib_init_poses.at(tc_last);
     auto& pose_new = calib_init_poses.at(tc_new);
-
-    std::cout << "  [DEBUG] last_cam inliers=" << pose_last.num_inliers
-              << " new_cam inliers=" << pose_new.num_inliers << "\n";
 
     calib_opt->calib->T_i_c[new_cam] = calib_opt->calib->T_i_c[last_camera] *
                                        pose_last.T_a_c.inverse() *
@@ -465,10 +433,6 @@ void CamCalib::initCamExtrinsics() {
   }
 
   std::cout << "\n=== Camera extrinsics initialization DONE ===\n";
-  for (size_t j = 0; j < dataset->get_num_cams(); j++) {
-    std::cout << "T_c0_c" << j << ":\n"
-              << calib_opt->calib->T_i_c[j].matrix() << "\n\n";
-  }
 }
 
 void CamCalib::initOptimization() {
@@ -535,27 +499,29 @@ void CamCalib::initOptimization() {
   }
 
   calib_opt->init();
+  computeProjections();
 
   std::cout << "Initialized optimization." << std::endl;
 }  // namespace basalt
 
 void CamCalib::optimize() { optimizeWithParam(true); }
 
-bool CamCalib::optimizeWithParam(bool print_info,
+std::pair<bool, double> CamCalib::optimizeWithParam(bool print_info,
                                  std::map<std::string, double>* stats) {
   if (calib_init_poses.empty()) {
     std::cerr << "No initial camera poses. Press init_cam_poses initialize "
                  "camera poses "
               << std::endl;
-    return true;
+    return {true, -1};
   }
 
   if (!calib_opt.get() || !calib_opt->calibInitialized()) {
     std::cerr << "No initial intrinsics. Press init_intrinsics initialize "
                  "intrinsics"
               << std::endl;
-    return true;
+    return {true, -1};
   }
+  double mean_reprojection_error = 0;
 
   bool converged = true;
 
@@ -570,6 +536,8 @@ bool CamCalib::optimizeWithParam(bool print_info,
     std::cout << "stop_thresh: " << stop_thresh << std::endl;
     converged = calib_opt->optimize(true, huber_thresh, stop_thresh, error,
                                     num_points, reprojection_error);
+
+    mean_reprojection_error = reprojection_error / num_points;
 
     auto finish = std::chrono::high_resolution_clock::now();
 
@@ -607,17 +575,48 @@ bool CamCalib::optimizeWithParam(bool print_info,
 
       std::cout << "==================================" << std::endl;
     }
+    computeProjections();
   }
 
-  return converged;
+  return std::make_pair(converged, mean_reprojection_error);  //converged;
 }
 
-void CamCalib::saveCalib(double& fx, double& fy, double& cx, double& cy,
-                         double& k0, double& k1, double& k2, double& k3) {
+void CamCalib::computeProjections() {
+  reprojected_corners.clear();
+
+  if (!calib_opt.get() || !dataset.get()) return;
+
+  for (size_t j = 0; j < dataset->get_image_timestamps().size(); ++j) {
+    int64_t timestamp_ns = dataset->get_image_timestamps()[j];
+
+    for (size_t i = 0; i < calib_opt->calib->intrinsics.size(); i++) {
+      TimeCamId tcid(timestamp_ns, i);
+
+      ProjectedCornerData rc;
+      Eigen::aligned_vector<Eigen::Vector2d> polar_azimuthal_angle;
+
+      Sophus::SE3d T_c_w_ =
+          (calib_opt->getT_w_i(timestamp_ns) * calib_opt->calib->T_i_c[i])
+              .inverse();
+
+      Eigen::Matrix4d T_c_w = T_c_w_.matrix();
+
+      calib_opt->calib->intrinsics[i].project(
+          april_grid.aprilgrid_corner_pos_3d, T_c_w, rc.corners_proj,
+          rc.corners_proj_success, polar_azimuthal_angle);
+
+      reprojected_corners.emplace(tcid, rc);
+
+    }
+  }
+}
+
+
+void CamCalib::saveCalib(int camId, double& fx, double& fy, double& cx, double& cy,
+                         double& k0, double& k1, double& k2, double& k3, Eigen::Matrix4f& T_i_c) {
   if (calib_opt) {
-    for (int i = 0; i < dataset->get_num_cams(); i++) {
       Eigen::VectorXd values =
-          calib_opt->calib->intrinsics[i].getParam().transpose();
+          calib_opt->calib->intrinsics[camId].getParam().transpose();
 
       fx = values[0];
       fy = values[1];
@@ -633,10 +632,12 @@ void CamCalib::saveCalib(double& fx, double& fy, double& cx, double& cy,
                 << " cy: " << cy << " k0: " << k0 << " k1: " << k1
                 << " k2: " << k2 << " k3: " << k3 << std::endl;
 
-      auto extr = calib_opt->calib->T_i_c[i];
+      auto extr = calib_opt->calib->T_i_c[camId];
       std::cout << "T_i_c: " << extr.matrix() << std::endl;
-      std::cout << "Saved calibration " << std::endl;
-    }
+
+      Eigen::Matrix4f mat4f = extr.matrix().cast<float>();
+      T_i_c = mat4f;
+      //std::cout << "Saved calibration " << std::endl;
   }
 }
 

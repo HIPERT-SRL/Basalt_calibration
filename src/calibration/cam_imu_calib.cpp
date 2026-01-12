@@ -59,25 +59,15 @@ CamImuCalib::CamImuCalib(const std::string& aprilgrid_path, int numCams,
       dataset(dataset),
       camCalibJson(camCalibJson)
 
-       {
-        dataset->set_num_cams(numCams);
-
-auto& ts = dataset->get_image_timestamps();
-
-bool sorted = std::is_sorted(ts.begin(), ts.end());
-if(sorted) {
-    std::cout << "Timestamp ordinati!" << std::endl;
-} else {
-    std::cout << "Timestamp NON ordinati!" << std::endl;
-    // opzionale: stampa i primi pochi non ordinati
-    for(size_t i = 1; i < ts.size(); i++) {
-        if(ts[i] < ts[i-1])
-            std::cout << "ts[" << i-1 << "]=" << ts[i-1] 
-                      << " ts[" << i << "]=" << ts[i] << std::endl;
-    }
-}
-
+      {
+      dataset->set_num_cams(numCams);
+      auto& ts = dataset->get_image_timestamps();
+      bool sorted = std::is_sorted(ts.begin(), ts.end());
+      if(!sorted) {
+          std::cout << "Timestamps not ordered!" << std::endl;
       }
+
+}
 
 CamImuCalib::~CamImuCalib() {
   if (processing_thread) {
@@ -100,7 +90,6 @@ void CamImuCalib::loadDataset() {
     double imu_noise[4] = {accel_noise_std, gyro_noise_std, accel_bias_std,
                            gyro_bias_std};
 
-    //std::cout << "imu noise: " << imu_noise[0] << " " << imu_noise[1] << " " << imu_noise[2] << " " << imu_noise[3] << std::endl;
     calib_opt->calib->accel_noise_std.setConstant(imu_noise[0]);
     calib_opt->calib->gyro_noise_std.setConstant(imu_noise[1]);
     calib_opt->calib->accel_bias_std.setConstant(imu_noise[2]);
@@ -161,19 +150,11 @@ void CamImuCalib::initCamImuTransform() {
   }
 
 
-  std::cout << "numero di immagini: " << dataset->get_image_timestamps().size()
-            << std::endl;
-  std::cout << "numero di accel: " << dataset->get_accel_data().size() << std::endl;
-  std::cout << "numero di gyro: " << dataset->get_gyro_data().size() << std::endl;
-  std::cout << "primo accel: " << dataset->get_accel_data()[0].timestamp_ns << std::endl;
-  std::cout << "ultimo accel: " << dataset->get_accel_data().back().timestamp_ns << std::endl;
-
   std::vector<int64_t> timestamps_cam;
   Eigen::aligned_vector<Eigen::Vector3d> rot_vel_cam;
   Eigen::aligned_vector<Eigen::Vector3d> rot_vel_imu;
 
   Sophus::SO3d R_i_c0_init = calib_opt->getCamT_i_c(0).so3();
-  std::cout << "R_i_c0_init: " << R_i_c0_init.matrix() << std::endl;
 
   for (size_t i = 1; i < dataset->get_image_timestamps().size(); i++) {
     int64_t timestamp0_ns = dataset->get_image_timestamps()[i - 1];
@@ -185,17 +166,13 @@ void CamImuCalib::initCamImuTransform() {
     if (calib_init_poses.find(tcid0) == calib_init_poses.end()) continue;
     if (calib_init_poses.find(tcid1) == calib_init_poses.end()) continue;
 
-    std::cout << "timestamp0_ns: " << timestamp0_ns << std::endl;
     Sophus::SE3d T_a_c0 = calib_init_poses.at(tcid0).T_a_c;
-    std::cout << "T_a_c0: " << T_a_c0.matrix() << std::endl;
     Sophus::SE3d T_a_c1 = calib_init_poses.at(tcid1).T_a_c;
-    std::cout << "T_a_c1: " << T_a_c1.matrix() << std::endl;
 
     double dt = (timestamp1_ns - timestamp0_ns) * 1e-9;
 
     Eigen::Vector3d rot_vel_c0 =
         R_i_c0_init * (T_a_c0.so3().inverse() * T_a_c1.so3()).log() / dt;
-        std::cout << "rot_vel_c0: " << rot_vel_c0.transpose() << std::endl;
 
     timestamps_cam.push_back(timestamp0_ns);
     rot_vel_cam.push_back(rot_vel_c0);
@@ -238,27 +215,17 @@ void CamImuCalib::initCamImuTransform() {
       rot_vel_imu_m * rot_vel_cam_m.transpose() *
       (rot_vel_cam_m * rot_vel_cam_m.transpose()).inverse();
 
-  // std::cout << "raw R_i_c0\n" << R_i_c0 << std::endl;
 
-  Eigen::AngleAxisd aa(R_i_c0);  // RotationMatrix to AxisAngle
+  Eigen::AngleAxisd aa(R_i_c0);
   R_i_c0 = aa.toRotationMatrix();
 
-  // std::cout << "R_i_c0\n" << R_i_c0 << std::endl;
-
-  std::cout << "QUIIIIIIIIIIIIIIIIII\n";
   Sophus::SE3d T_i_c0(R_i_c0, Eigen::Vector3d::Zero());
-
-  std::cout << "T_i_c0\n" << T_i_c0.matrix() << std::endl;
 
   for (size_t i = 0; i < dataset->get_num_cams(); i++) {
     calib_opt->getCamT_i_c(i) = T_i_c0 * calib_opt->getCamT_i_c(i);
   }
 
   std::cout << "Done Camera-IMU extrinsics initialization:" << std::endl;
-  for (size_t j = 0; j < dataset->get_num_cams(); j++) {
-    std::cout << "T_i_c" << j << ":\n"
-              << calib_opt->getCamT_i_c(j).matrix() << std::endl;
-  }
 }
 
 
@@ -342,6 +309,7 @@ void CamImuCalib::initOptimization() {
 
   calib_opt->setG(g_a_init);
   calib_opt->init();
+  computeProjections();
 
 }
 
@@ -453,23 +421,26 @@ void CamImuCalib::initOptimization() {
 //   recomputeDataLog();
 // }
 
-void CamImuCalib::optimizeUntilConvergence() {
+double CamImuCalib::optimizeUntilConvergence() {
   bool converged = false;
-
+  double error;
   while (!converged) {
-    converged = optimizeWithParam(true);
+    auto result = optimizeWithParam(true);
+    converged = result.first;
+    error = result.second;
   }
+  return error;
 }
 
 void CamImuCalib::optimize() { optimizeWithParam(true); }
 
-bool CamImuCalib::optimizeWithParam(bool print_info,
+std::pair<bool, double> CamImuCalib::optimizeWithParam(bool print_info,
                                     std::map<std::string, double> *stats) {
   if (!calib_opt.get() || !calib_opt->calibInitialized()) {
     std::cerr << "Initalize optimization first!" << std::endl;
-    return true;
+    return {true, -1};
   }
-
+  double mean_reprojection_error = 0;
    bool converged = true;
 
     //calib_opt->calib->printInfo();
@@ -496,6 +467,7 @@ bool CamImuCalib::optimizeWithParam(bool print_info,
                                     opt_mocap, 4, 1e-8 , error,
                                     num_points, reprojection_error);
 
+    mean_reprojection_error = reprojection_error / num_points;
     auto finish = std::chrono::high_resolution_clock::now();
 
     if (stats) {
@@ -567,19 +539,70 @@ bool CamImuCalib::optimizeWithParam(bool print_info,
 
       std::cout << "==================================" << std::endl;
     }
+    computeProjections();
   }
 
-  return converged;
+  return std::make_pair(converged, mean_reprojection_error);  //converged;
 }
 
-// void CamImuCalib::saveCalib() {
-//   if (calib_opt) {
-//     calib_opt->saveCalib(cache_path);
+void CamImuCalib::computeProjections() {
+  reprojected_corners.clear();
 
-//     std::cout << "Saved calibration in " << cache_path << "calibration.json"
-//               << std::endl;
-//   }
-// }
+  if (!calib_opt.get() || !dataset.get()) return;
+
+  for (size_t j = 0; j < dataset->get_image_timestamps().size(); ++j) {
+    int64_t timestamp_ns = dataset->get_image_timestamps()[j];
+
+    for (size_t i = 0; i < calib_opt->calib->intrinsics.size(); i++) {
+      TimeCamId tcid(timestamp_ns, i);
+
+      ProjectedCornerData rc;
+      Eigen::aligned_vector<Eigen::Vector2d> polar_azimuthal_angle;
+
+      Sophus::SE3d T_c_w_ =
+          (calib_opt->getT_w_i(timestamp_ns) * calib_opt->calib->T_i_c[i])
+              .inverse();
+
+      Eigen::Matrix4d T_c_w = T_c_w_.matrix();
+
+      calib_opt->calib->intrinsics[i].project(
+          april_grid.aprilgrid_corner_pos_3d, T_c_w, rc.corners_proj,
+          rc.corners_proj_success, polar_azimuthal_angle);
+
+      reprojected_corners.emplace(tcid, rc);
+
+    }
+  }
+}
+
+void CamImuCalib::saveCalib(int camId, double& fx, double& fy, double& cx, double& cy,
+                         double& k0, double& k1, double& k2, double& k3, Eigen::Matrix4f& T_i_c) {
+  if (calib_opt) {
+      Eigen::VectorXd values =
+          calib_opt->calib->intrinsics[camId].getParam().transpose();
+
+      fx = values[0];
+      fy = values[1];
+      cx = values[2];
+      cy = values[3];
+
+      k0 = values[4];
+      k1 = values[5];
+      k2 = values[6];
+      k3 = values[7];
+
+      std::cout << " fx: " << fx << " fy: " << fy << " cx: " << cx
+                << " cy: " << cy << " k0: " << k0 << " k1: " << k1
+                << " k2: " << k2 << " k3: " << k3 << std::endl;
+
+      auto extr = calib_opt->calib->T_i_c[camId];
+      std::cout << "T_i_c: " << extr.matrix() << std::endl;
+
+      Eigen::Matrix4f mat4f = extr.matrix().cast<float>();
+      T_i_c = mat4f;
+      //std::cout << "Saved calibration " << std::endl;
+  }
+}
 
 // void CamImuCalib::saveMocapCalib() {
 //   if (calib_opt) {

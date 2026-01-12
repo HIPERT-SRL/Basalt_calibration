@@ -105,10 +105,10 @@ bool estimateTransformation(
   return ransac.inliers_.size() > 8;
 }
 
-void CalibHelper::detectCornersMultiThread(const std::shared_ptr<CustomVioDataset>& vio_data,
-                            const AprilGrid& april_grid,
-                            CalibCornerMap& calib_corners,
-                            CalibCornerMap& calib_corners_rejected) {
+void CalibHelper::detectCornersMultiThread(
+    const std::shared_ptr<CustomVioDataset> &vio_data,
+    const AprilGrid &april_grid, CalibCornerMap &calib_corners,
+    CalibCornerMap &calib_corners_rejected) {
   calib_corners.clear();
   calib_corners_rejected.clear();
 
@@ -134,26 +134,23 @@ void CalibHelper::detectCornersMultiThread(const std::shared_ptr<CustomVioDatase
                             ccd_good.corner_ids, ccd_good.radii,
                             ccd_bad.corners, ccd_bad.corner_ids, ccd_bad.radii);
 
+              //                             if (!ccd_good.corners.empty() &&
+              //                             timestamp_ns==1520527971463884167)
+              //                             {
+              //   std::cout << "  -- GOOD CORNERS --\n";
+              //   for (size_t k = 0; k < ccd_good.corners.size(); k++) {
+              //     std::cout << "    id=" << ccd_good.corner_ids[k]
+              //               << "  xy=(" << ccd_good.corners[k].x() << ", "
+              //               << ccd_good.corners[k].y() << ")"
+              //               << "  radius=" << ccd_good.radii[k]
+              //               << "\n";
+              //   }
+              // }
 
-                                    if (!ccd_good.corners.empty() && timestamp_ns==1520527971463884167) {
-          std::cout << "  -- GOOD CORNERS --\n";
-          for (size_t k = 0; k < ccd_good.corners.size(); k++) {
-            std::cout << "    id=" << ccd_good.corner_ids[k]
-                      << "  xy=(" << ccd_good.corners[k].x() << ", "
-                      << ccd_good.corners[k].y() << ")"
-                      << "  radius=" << ccd_good.radii[k]
-                      << "\n";
-          }
-        }
-
-
-                            //  std::cout << "image (" << timestamp_ns << ","
-                            //  << i
-                            //            << ")  detected " <<
-                            //            ccd_good.corners.size()
-                            //            << "corners (" <<
-                            //            ccd_bad.corners.size()
-                            //            << " rejected)" << std::endl;
+              std::cout << "image (" << timestamp_ns << "," << i
+                        << ")  detected " << ccd_good.corners.size()
+                        << "corners (" << ccd_bad.corners.size() << " rejected)"
+                        << std::endl;
 
               TimeCamId tcid(timestamp_ns, i);
 
@@ -166,11 +163,11 @@ void CalibHelper::detectCornersMultiThread(const std::shared_ptr<CustomVioDatase
 }
 
 void CalibHelper::detectCorners(const ManagedImage<uint16_t>::Ptr &image,
-                                int camId,
-                                const AprilGrid &april_grid,
+                                int camId, const AprilGrid &april_grid,
                                 CalibCornerMap &calib_corners,
                                 CalibCornerMap &calib_corners_rejected,
-                                FrameId &frame_count, std::shared_ptr<CustomVioDataset>& dataset) {
+                                FrameId &frame_count,
+                                std::shared_ptr<CustomVioDataset> &dataset) {
   // calib_corners.clear();
   // calib_corners_rejected.clear();
 
@@ -180,14 +177,14 @@ void CalibHelper::detectCorners(const ManagedImage<uint16_t>::Ptr &image,
   if (image != nullptr) {
     CalibCornerData ccd_good;
     CalibCornerData ccd_bad;
-    detector.detectTags(*image,ccd_good.corners, ccd_good.corner_ids,
+    detector.detectTags(*image, ccd_good.corners, ccd_good.corner_ids,
                         ccd_good.radii, ccd_bad.corners, ccd_bad.corner_ids,
                         ccd_bad.radii);
 
-    std::cout << "\n=== IMAGE timestamp=" << frame_count
-                  << " cam=" << camId << " ===\n";
-        std::cout << "Good corners: " << ccd_good.corners.size()
-                  << " | Rejected: " << ccd_bad.corners.size() << "\n";
+    std::cout << "\n=== IMAGE timestamp=" << frame_count << " cam=" << camId
+              << " ===\n";
+    std::cout << "Good corners: " << ccd_good.corners.size()
+              << " | Rejected: " << ccd_bad.corners.size() << "\n";
 
     //     // ----- Stampa dettagliata good -----
     //     if (!ccd_good.corners.empty()) {
@@ -206,7 +203,7 @@ void CalibHelper::detectCorners(const ManagedImage<uint16_t>::Ptr &image,
 
       calib_corners.emplace(tcid, ccd_good);
       calib_corners_rejected.emplace(tcid, ccd_bad);
-      //dataset.add_image(image, camId, frame_count);
+      // dataset.add_image(image, camId, frame_count);
       dataset->add_timestamp(frame_count);
     }
   }

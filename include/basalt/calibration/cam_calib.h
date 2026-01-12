@@ -50,9 +50,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <basalt/calibration/aprilgrid.h>
 #include <basalt/calibration/calibration_helper.h>
 #include <basalt/image/image.h>
-#include <basalt/utils/sophus_utils.hpp>
 #include <basalt/io/dataset_io.h>
 #include <basalt/io/dataset_io_custom.h>
+#include <basalt/utils/sophus_utils.hpp>
 
 #include <opencv2/core/mat.hpp>
 #include <opencv2/highgui.hpp>
@@ -73,7 +73,7 @@ class CamCalib {
   bool detectCorners(const ManagedImage<uint16_t>::Ptr& image, int camId,
                      FrameId& frame_count, std::string& path);
 
- void detectCornersMultiThread();
+  void detectCornersMultiThread();
   void setImageSize(size_t width, size_t height);
 
   void addImage(const ManagedImage<uint16_t>::Ptr& image, int camId,
@@ -81,10 +81,11 @@ class CamCalib {
 
   const CalibCornerMap& getCorners();
 
-
   std::string serializeCalib();
 
   void saveCorners(const std::string& path);
+
+  void computeProjections();
 
   void setCornerDetectionImage(const cv::Mat& corners_image);
 
@@ -102,20 +103,24 @@ class CamCalib {
 
   void initOptimization();
 
-  void optimizeUntilConvergence();
+  double optimizeUntilConvergence();
 
   void optimize();
 
-  bool optimizeWithParam(bool print_info,
+  std::pair<bool, double>  optimizeWithParam(bool print_info,
                          std::map<std::string, double>* stats = nullptr);
 
-  void saveCalib(double& fx, double& fy, double& cx, double& cy, double& k0,
-                 double& k1, double& k2, double& k3);
+  void saveCalib(int camId, double& fx, double& fy, double& cx, double& cy, double& k0,
+                 double& k1, double& k2, double& k3, Eigen::Matrix4f& T_i_c);
 
- std::shared_ptr<CustomVioDataset> getDataset() { return dataset; }
- CalibCornerMap& getCalibCorners() { return calib_corners; }
- CalibCornerMap& getCalibCornersRejected() { return calib_corners_rejected; }
- CalibInitPoseMap& getCalibInitPoses() { return calib_init_poses; }
+  std::shared_ptr<CustomVioDataset> getDataset() { return dataset; }
+  CalibCornerMap& getCalibCorners() { return calib_corners; }
+  CalibCornerMap& getCalibCornersRejected() { return calib_corners_rejected; }
+  CalibInitPoseMap& getCalibInitPoses() { return calib_init_poses; }
+  std::map<TimeCamId, ProjectedCornerData>& getReprojectedCorners() {
+    return reprojected_corners;
+  }
+
  private:
   static constexpr int UI_WIDTH = 300;
 
@@ -129,6 +134,7 @@ class CamCalib {
   CalibCornerMap calib_corners_rejected;
   CalibInitPoseMap calib_init_poses;
 
+  std::map<TimeCamId, ProjectedCornerData> reprojected_corners;
   std::shared_ptr<PosesOptimization> calib_opt;
 
   AprilGrid april_grid;
