@@ -83,25 +83,12 @@ void add_imu_data(int64_t timestamp_ns, double ax, double ay, double az,
     this->gyro_data.back().timestamp_ns = timestamp_ns;
     this->gyro_data.back().data = Eigen::Vector3d(wx, wy, wz);
 
-    // ===== DEBUG: verifica monotonicità =====
     if (accel_data.size() > 1) {
         int64_t prev_ts = accel_data[accel_data.size() - 2].timestamp_ns;
         int64_t curr_ts = accel_data.back().timestamp_ns;
 
         if (curr_ts <= prev_ts) {
-            std::cout << "IMU TIMESTAMP NON ORDINATO! "
-                      << "prev=" << prev_ts
-                      << " curr=" << curr_ts
-                      << "  (Δ=" << (curr_ts - prev_ts) << ")"
-                      << std::endl;
-        }
-
-        // stampa periodica ogni 100 misure
-        if (accel_data.size() % 100 == 0) {
-            std::cout << "[IMU] size=" << accel_data.size()
-                      << " last_ts=" << curr_ts
-                      << " Δ=" << (curr_ts - prev_ts)
-                      << std::endl;
+            std::cout << "IMU TIMESTAMP NOT ORDERED! " << std::endl;
         }
     }
 }

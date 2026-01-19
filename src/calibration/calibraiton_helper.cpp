@@ -134,8 +134,7 @@ void CalibHelper::detectCornersMultiThread(
                             ccd_good.corner_ids, ccd_good.radii,
                             ccd_bad.corners, ccd_bad.corner_ids, ccd_bad.radii);
 
-              //                             if (!ccd_good.corners.empty() &&
-              //                             timestamp_ns==1520527971463884167)
+              //                             if (!ccd_good.corners.empty())
               //                             {
               //   std::cout << "  -- GOOD CORNERS --\n";
               //   for (size_t k = 0; k < ccd_good.corners.size(); k++) {

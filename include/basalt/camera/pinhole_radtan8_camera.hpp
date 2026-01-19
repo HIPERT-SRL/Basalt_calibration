@@ -321,9 +321,9 @@ class PinholeRadtan8Camera {
     const Scalar& p1 = param_[6];
     const Scalar& p2 = param_[7];
     const Scalar& k3 = param_[8];
-    const Scalar& k4 = param_[9];
-    const Scalar& k5 = param_[10];
-    const Scalar& k6 = param_[11];
+    const Scalar k4 = S0;
+    const Scalar k5 = S0;
+    const Scalar k6 = S0;
 
     const Scalar& x = p3d_eval[0];
     const Scalar& y = p3d_eval[1];
@@ -457,9 +457,9 @@ class PinholeRadtan8Camera {
       const Scalar du_p1 = w20 * w9;
       const Scalar du_p2 = w10 * w20;
       const Scalar du_k3 = w17 * w21;
-      const Scalar du_k4 = -w15 * w24;
-      const Scalar du_k5 = -fx * w25 * w8;
-      const Scalar du_k6 = -w21 * w24;
+      const Scalar du_k4 = S0; // Era: -w15 * w24;
+      const Scalar du_k5 = S0; // Era: -fx * w25 * w8;
+      const Scalar du_k6 = S0; // Era: -w21 * w24;
       const Scalar dv_fx = S0;
       const Scalar dv_fy = w14 * (w11 * (p1 * w27 + p2 * w9) + w26);
       const Scalar dv_cx = S0;
@@ -469,9 +469,9 @@ class PinholeRadtan8Camera {
       const Scalar dv_p1 = w27 * w30;
       const Scalar dv_p2 = w30 * w9;
       const Scalar dv_k3 = w21 * w29;
-      const Scalar dv_k4 = -w15 * w31;
-      const Scalar dv_k5 = -fy * w25 * w26;
-      const Scalar dv_k6 = -w21 * w31;
+      const Scalar dv_k4 = S0; // Era: -w15 * w31;
+      const Scalar dv_k5 = S0; // Era: -fy * w25 * w26;
+      const Scalar dv_k6 = S0; // Era: -w21 * w31;
 
       (*d_proj_d_param)(0, 0) = du_fx;
       (*d_proj_d_param)(0, 1) = du_fy;
@@ -711,7 +711,8 @@ class PinholeRadtan8Camera {
   /// @param[in] inc increment vector
   void operator+=(const VecN& inc) {
     param_ += inc;
-    rpmax_ = computeRpmax();
+    //rpmax_ = computeRpmax();
+    rpmax_ = S0;
   }
 
   /// @brief Returns a const reference to the intrinsic parameters vector

@@ -96,6 +96,26 @@ void CamCalib::detectCornersMultiThread() {
 
 }
 
+bool CamCalib::loadCorners(CalibCornerMap& calib_corners_map)  {
+    calib_corners = calib_corners_map;
+    return true;
+}
+
+bool CamCalib::loadCorners(std::string& path){
+    std::ifstream is(path, std::ios::binary);
+    if (is.good()) {
+      cereal::BinaryInputArchive archive(is);
+
+      calib_corners.clear();
+      calib_corners_rejected.clear();
+      archive(calib_corners);
+      archive(calib_corners_rejected);
+      return true;
+    } else {
+      std::cout << "No pre-processed detected corners found" << std::endl;
+    }
+    return false;
+}
 bool CamCalib::detectCorners(const ManagedImage<uint16_t>::Ptr& image,
                              int camId, FrameId& frame_count,
                              std::string& path) {
@@ -113,6 +133,8 @@ bool CamCalib::detectCorners(const ManagedImage<uint16_t>::Ptr& image,
       frame_count = static_cast<FrameId>(calib_corners.size());
 
       std::cout << "Loaded detected corners from: " << path << std::endl;
+      std::cout << "Detected corners: " << calib_corners.size() << std::endl;
+      return true;
     } else {
       std::cout << "No pre-processed detected corners found" << std::endl;
     }
