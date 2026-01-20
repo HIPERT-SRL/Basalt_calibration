@@ -70,7 +70,7 @@ class CamCalib {
 
   ~CamCalib();
 
-  bool detectCorners(const ManagedImage<uint16_t>::Ptr& image, int camId,
+  bool detectCorners(const ManagedImage<uint8_t>::Ptr& image, int camId,
                      FrameId& frame_count, std::string& path);
 
   void detectCornersMultiThread();
@@ -81,7 +81,7 @@ class CamCalib {
 
   void setImageSize(size_t width, size_t height);
 
-  void addImage(const ManagedImage<uint16_t>::Ptr& image, int camId,
+  void addImage(const ManagedImage<uint8_t>::Ptr& image, int camId,
                 int64_t timestamp_ns);
 
   const CalibCornerMap& getCorners();

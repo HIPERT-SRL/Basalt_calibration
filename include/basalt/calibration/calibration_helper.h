@@ -79,7 +79,7 @@ using CalibInitPoseMap =
 
 class CalibHelper {
  public:
-  static void detectCorners(const ManagedImage<uint16_t>::Ptr& image,
+  static void detectCorners(const ManagedImage<uint8_t>::Ptr& image,
                             int camId,
                             const AprilGrid& april_grid,
                             CalibCornerMap& calib_corners,

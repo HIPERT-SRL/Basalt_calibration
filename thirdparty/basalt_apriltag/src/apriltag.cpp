@@ -43,7 +43,7 @@ ApriltagDetector::ApriltagDetector(int numTags) {
 ApriltagDetector::~ApriltagDetector() { delete data; }
 
 void ApriltagDetector::detectTags(
-    basalt::ManagedImage<uint16_t>& img_raw,
+    basalt::ManagedImage<uint8_t>& img_raw,
     Eigen::aligned_vector<Eigen::Vector2d>& corners, std::vector<int>& ids,
     std::vector<double>& radii,
     Eigen::aligned_vector<Eigen::Vector2d>& corners_rejected,
@@ -58,10 +58,10 @@ void ApriltagDetector::detectTags(
   cv::Mat image(img_raw.h, img_raw.w, CV_8U);
 
   uint8_t* dst = image.ptr();
-  const uint16_t* src = img_raw.ptr;
+  const uint8_t* src = img_raw.ptr;
 
   for (size_t i = 0; i < img_raw.size(); i++) {
-    dst[i] = (src[i] >> 8);
+    dst[i] = src[i];
   }
 
   // detect the tags

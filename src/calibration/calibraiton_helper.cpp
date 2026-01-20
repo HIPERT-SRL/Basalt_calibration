@@ -120,9 +120,6 @@ void CalibHelper::detectCornersMultiThread(
 
         for (size_t j = r.begin(); j != r.end(); ++j) {
           int64_t timestamp_ns = vio_data->get_image_timestamps()[j];
-          //           if(timestamp_ns==1520528005014933167){
-          //   continue;
-          // }
           const std::vector<ImageData> &img_vec =
               vio_data->get_image_data(timestamp_ns);
 
@@ -146,10 +143,10 @@ void CalibHelper::detectCornersMultiThread(
               //   }
               // }
 
-              std::cout << "image (" << timestamp_ns << "," << i
-                        << ")  detected " << ccd_good.corners.size()
-                        << "corners (" << ccd_bad.corners.size() << " rejected)"
-                        << std::endl;
+              // std::cout << "image (" << timestamp_ns << "," << i
+              //           << ")  detected " << ccd_good.corners.size()
+              //           << "corners (" << ccd_bad.corners.size() << " rejected)"
+              //           << std::endl;
 
               TimeCamId tcid(timestamp_ns, i);
 
@@ -161,7 +158,7 @@ void CalibHelper::detectCornersMultiThread(
       });
 }
 
-void CalibHelper::detectCorners(const ManagedImage<uint16_t>::Ptr &image,
+void CalibHelper::detectCorners(const ManagedImage<uint8_t>::Ptr &image,
                                 int camId, const AprilGrid &april_grid,
                                 CalibCornerMap &calib_corners,
                                 CalibCornerMap &calib_corners_rejected,

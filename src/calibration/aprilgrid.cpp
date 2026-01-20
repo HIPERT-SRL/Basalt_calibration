@@ -41,17 +41,16 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 namespace basalt {
 
-AprilGrid::AprilGrid(const std::string &config_path) {
-  std::ifstream is(config_path);
-  if (is.is_open()) {
-    cereal::JSONInputArchive ar(is);
+AprilGrid::AprilGrid(const std::string &json_content) {
+  try {
+    std::stringstream ss(json_content);
+    cereal::JSONInputArchive ar(ss);
     ar(cereal::make_nvp("tagCols", tagCols));
     ar(cereal::make_nvp("tagRows", tagRows));
     ar(cereal::make_nvp("tagSize", tagSize));
     ar(cereal::make_nvp("tagSpacing", tagSpacing));
-  } else {
-    std::cerr << "Could not open aprilgrid configuration: " << config_path
-              << std::endl;
+  } catch (const std::exception& e) {
+    std::cerr << "Could not parse aprilgrid configuration: " << e.what() << std::endl;
     std::abort();
   }
 
@@ -100,8 +99,6 @@ AprilGrid::AprilGrid(const std::string &config_path) {
     }
   }
   }
-  std::cout << "Size: " << aprilgrid_corner_pos_3d.size() << std::endl;
-  std::cout << aprilgrid_corner_pos_3d.size() << std::endl;
 
   int num_vign_points = 5;
   int num_blocks = tagCols * tagRows * 2;

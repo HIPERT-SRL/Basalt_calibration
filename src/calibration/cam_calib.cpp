@@ -116,7 +116,7 @@ bool CamCalib::loadCorners(std::string& path){
     }
     return false;
 }
-bool CamCalib::detectCorners(const ManagedImage<uint16_t>::Ptr& image,
+bool CamCalib::detectCorners(const ManagedImage<uint8_t>::Ptr& image,
                              int camId, FrameId& frame_count,
                              std::string& path) {
   if (load_corners) {
@@ -317,7 +317,7 @@ void CamCalib::initCamIntrinsics() {
 }
 
 
-void CamCalib::addImage(const ManagedImage<uint16_t>::Ptr& image, int camId,
+void CamCalib::addImage(const ManagedImage<uint8_t>::Ptr& image, int camId,
                 int64_t timestamp_ns){
                   dataset->add_image(image, camId, timestamp_ns);
                 }

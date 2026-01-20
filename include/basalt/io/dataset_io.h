@@ -72,7 +72,7 @@ namespace basalt {
 struct ImageData {
   ImageData() : exposure(0) {}
 
-  ManagedImage<uint16_t>::Ptr img;
+  ManagedImage<uint8_t>::Ptr img;
   double exposure;
 };
 

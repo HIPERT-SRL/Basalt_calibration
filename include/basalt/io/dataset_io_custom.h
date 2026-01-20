@@ -94,7 +94,7 @@ void add_imu_data(int64_t timestamp_ns, double ax, double ay, double az,
 }
 
 
-  void add_image(const ManagedImage<uint16_t>::Ptr& image,
+  void add_image(const ManagedImage<uint8_t>::Ptr& image,
               int camId,
               int64_t timestamp_ns)
   {

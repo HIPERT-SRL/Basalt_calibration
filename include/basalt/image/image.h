@@ -913,6 +913,8 @@ class ManagedImage : public Image<T> {
   }
 
   inline void Deallocate() {
+    //deallocation not managed by basalt
+    return;
     if (Image<T>::ptr) {
       Allocator().deallocate(Image<T>::ptr,
                              (Image<T>::h * Image<T>::pitch) / sizeof(T));
