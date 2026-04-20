@@ -50,10 +50,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 namespace basalt {
 
-CamImuCalib::CamImuCalib(const std::string& aprilgrid_path, int numCams,
+CamImuCalib::CamImuCalib(const AprilGrid&  aprilgrid, int numCams,
                          std::shared_ptr<CustomVioDataset> dataset, CalibCornerMap calib_corners,
                          CalibCornerMap calib_corners_rejected, std::string camCalibJson)
-    : april_grid(aprilgrid_path),
+    : april_grid(aprilgrid),
       calib_corners(calib_corners),
       calib_corners_rejected(calib_corners_rejected),
       dataset(dataset),

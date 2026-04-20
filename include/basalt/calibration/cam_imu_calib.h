@@ -60,7 +60,7 @@ class SplineOptimization;
 
 class CamImuCalib {
  public:
-  CamImuCalib(const std::string& aprilgrid_path, int numCams,
+  CamImuCalib(const AprilGrid&  aprilgrid, int numCams,
     std::shared_ptr<CustomVioDataset> dataset, CalibCornerMap calib_corners,
   CalibCornerMap calib_corners_rejected, std::string camCalibJson);
 
