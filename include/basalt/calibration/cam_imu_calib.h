@@ -92,7 +92,7 @@ class CamImuCalib {
                          std::map<std::string, double> *stats = nullptr);
 
   void saveCalib(int camId, double& fx, double& fy, double& cx, double& cy, double& k0,
-                 double& k1, double& k2, double& k3, Eigen::Matrix4f& T_i_c);
+                 double& k1, double& k2, double& k3, double& k4, Eigen::Matrix4f& T_i_c);
 
   std::map<TimeCamId, ProjectedCornerData>& getReprojectedCorners() {
     return reprojected_corners;

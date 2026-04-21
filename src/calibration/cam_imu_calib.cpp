@@ -576,7 +576,7 @@ void CamImuCalib::computeProjections() {
 }
 
 void CamImuCalib::saveCalib(int camId, double& fx, double& fy, double& cx, double& cy,
-                         double& k0, double& k1, double& k2, double& k3, Eigen::Matrix4f& T_i_c) {
+                         double& k0, double& k1, double& k2, double& k3,double& k4, Eigen::Matrix4f& T_i_c) {
   if (calib_opt) {
       Eigen::VectorXd values =
           calib_opt->calib->intrinsics[camId].getParam().transpose();
@@ -590,10 +590,11 @@ void CamImuCalib::saveCalib(int camId, double& fx, double& fy, double& cx, doubl
       k1 = values[5];
       k2 = values[6];
       k3 = values[7];
+      k4 = values.size() > 8 ? values[8] : 0; 
 
       std::cout << " fx: " << fx << " fy: " << fy << " cx: " << cx
                 << " cy: " << cy << " k0: " << k0 << " k1: " << k1
-                << " k2: " << k2 << " k3: " << k3 << std::endl;
+                << " k2: " << k2 << " k3: " << k3 << " k4: " << k4 << std::endl;
 
       auto extr = calib_opt->calib->T_i_c[camId];
       std::cout << "T_i_c: " << extr.matrix() << std::endl;
