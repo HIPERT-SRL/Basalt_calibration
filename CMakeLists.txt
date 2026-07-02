@@ -57,7 +57,7 @@ find_package(
     COMPONENTS
         core
         imgproc
-        calib3d
+        calib
         highgui
 )
 add_subdirectory(thirdparty/basalt_apriltag)

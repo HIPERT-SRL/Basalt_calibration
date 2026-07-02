@@ -1,5 +1,6 @@
 
 #include "opencv2/opencv.hpp"
+#include "opencv2/geometry.hpp"
 
 #include "apriltags/TagDetection.h"
 #include "apriltags/MathUtil.h"

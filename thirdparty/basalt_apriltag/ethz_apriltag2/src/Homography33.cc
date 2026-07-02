@@ -6,6 +6,7 @@
 #include "Eigen/Dense"
 
 #include <opencv2/opencv.hpp>
+#include <opencv2/geometry.hpp>
 
 #include "apriltags/Homography33.h"
 
